@@ -29,7 +29,7 @@ export function PlayerControls({
   onSeek,
 }: PlayerControlsProps) {
   return (
-    <footer className="grid gap-2.5 border-t border-[#303743] bg-gradient-to-b from-[#20252d] to-[#191e26] px-4 py-3">
+    <footer className="grid h-full gap-2.5 border-t border-[#303743] bg-gradient-to-b from-[#20252d] to-[#191e26] px-4 py-3">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 max-[860px]:grid-cols-1 max-[860px]:justify-items-center max-[860px]:gap-2.5">
         <div className="min-w-0" aria-hidden="true" />
 

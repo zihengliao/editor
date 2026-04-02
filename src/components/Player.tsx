@@ -32,8 +32,6 @@ function getContainedFrameSize(
 interface PlayerProps {
   videoFile: VideoFile | null;
   videoRef: RefObject<HTMLVideoElement | null>;
-  isImporting: boolean;
-  onOpenVideo: () => void;
   onLoadedMetadata: (durationMs: number, videoName: string) => void;
   onTimeUpdate: (timeMs: number) => void;
   onError: (reason: string) => void;
@@ -43,8 +41,6 @@ interface PlayerProps {
 export function Player({
   videoFile,
   videoRef,
-  isImporting,
-  onOpenVideo,
   onLoadedMetadata,
   onTimeUpdate,
   onError,

@@ -6,33 +6,31 @@ import { usePlaybackController } from "./hooks/usePlaybackController";
 import type { RecentVideo, VideoFile } from "./types";
 import { clampNumber, formatClockTime } from "./utils/time";
 
-const VIEWER_HEIGHT_STORAGE_KEY = "courtcut.viewer-height";
-const DEFAULT_VIEWER_HEIGHT = 420;
-const MIN_VIEWER_HEIGHT = 220;
-const MIN_TRANSPORT_HEIGHT = 130;
-const RESIZER_HEIGHT = 8;
 const RECENT_VIDEOS_STORAGE_KEY = "courtcut.recent-videos";
+const CONTROLS_HEIGHT_STORAGE_KEY = "courtcut.controls-height";
+const DEFAULT_CONTROLS_HEIGHT = 170;
+const MIN_CONTROLS_HEIGHT = 120;
+const MIN_VIEWER_HEIGHT = 220;
 
-function getInitialViewerHeight(): number {
-  const rawValue = Number(window.localStorage.getItem(VIEWER_HEIGHT_STORAGE_KEY));
-  return Number.isFinite(rawValue) && rawValue >= MIN_VIEWER_HEIGHT
+function getInitialControlsHeight(): number {
+  const rawValue = Number(window.localStorage.getItem(CONTROLS_HEIGHT_STORAGE_KEY));
+  return Number.isFinite(rawValue) && rawValue >= MIN_CONTROLS_HEIGHT
     ? rawValue
-    : DEFAULT_VIEWER_HEIGHT;
+    : DEFAULT_CONTROLS_HEIGHT;
 }
 
 function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const titlebarRef = useRef<HTMLDivElement | null>(null);
-  const topbarRef = useRef<HTMLElement | null>(null);
 
   const [videoFile, setVideoFile] = useState<VideoFile | null>(null);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [viewerHeightPx, setViewerHeightPx] = useState(getInitialViewerHeight);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
+  const [controlsHeightPx, setControlsHeightPx] = useState(getInitialControlsHeight);
   const [recentVideos, setRecentVideos] = useState<RecentVideo[]>([]);
   const [statusMessage, setStatusMessage] = useState(
     "Open a local game file to preview footage.",
@@ -50,10 +48,6 @@ function App() {
     setCurrentTimeMs,
     setStatusMessage,
   });
-
-  useEffect(() => {
-    window.localStorage.setItem(VIEWER_HEIGHT_STORAGE_KEY, String(Math.round(viewerHeightPx)));
-  }, [viewerHeightPx]);
 
   useEffect(() => {
     try {
@@ -86,33 +80,15 @@ function App() {
   }, [recentVideos]);
 
   useEffect(() => {
-    function clampViewerForWindow() {
-      const shellElement = shellRef.current;
-      if (!shellElement) {
-        return;
-      }
-
-      const titlebarHeight = titlebarRef.current?.offsetHeight ?? 32;
-      const topbarHeight = topbarRef.current?.offsetHeight ?? 64;
-      const maxViewerHeight = Math.max(
-        MIN_VIEWER_HEIGHT,
-        shellElement.clientHeight - titlebarHeight - topbarHeight - MIN_TRANSPORT_HEIGHT - RESIZER_HEIGHT,
-      );
-
-      setViewerHeightPx((currentHeight) => clampNumber(currentHeight, MIN_VIEWER_HEIGHT, maxViewerHeight));
-    }
-
-    clampViewerForWindow();
-    window.addEventListener("resize", clampViewerForWindow);
-    return () => window.removeEventListener("resize", clampViewerForWindow);
-  }, []);
+    window.localStorage.setItem(CONTROLS_HEIGHT_STORAGE_KEY, String(Math.round(controlsHeightPx)));
+  }, [controlsHeightPx]);
 
   async function openVideo() {
     const currentVideoElement = videoRef.current;
     currentVideoElement?.pause();
     setIsPlaying(false);
     setIsImporting(true);
-    setStatusMessage("Transcoding video for playback...");
+    setStatusMessage("Opening video...");
 
     try {
       // Video selection runs through Electron's native file picker.
@@ -130,7 +106,7 @@ function App() {
       setCurrentTimeMs(0);
       setDurationMs(0);
       setIsPlaying(false);
-      setStatusMessage(`Loaded ${selectedVideo.name} (playback proxy).`);
+      setStatusMessage(`Loaded ${selectedVideo.name} (source file).`);
     } catch (error) {
       setStatusMessage(`Could not open video: ${(error as Error).message}`);
     } finally {
@@ -160,7 +136,7 @@ function App() {
       setCurrentTimeMs(0);
       setDurationMs(0);
       setIsPlaying(false);
-      setStatusMessage(`Loaded ${selectedVideo.name} (playback proxy).`);
+      setStatusMessage(`Loaded ${selectedVideo.name} (source file).`);
     } catch (error) {
       setStatusMessage(`Could not open recent video: ${(error as Error).message}`);
     } finally {
@@ -169,11 +145,11 @@ function App() {
     }
   }
 
-  function startViewerResize(event: ReactPointerEvent<HTMLDivElement>) {
+  function startControlsResize(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault();
 
     const startY = event.clientY;
-    const startHeight = viewerHeightPx;
+    const startHeight = controlsHeightPx;
 
     function handlePointerMove(moveEvent: PointerEvent) {
       const shellElement = shellRef.current;
@@ -182,14 +158,14 @@ function App() {
       }
 
       const titlebarHeight = titlebarRef.current?.offsetHeight ?? 32;
-      const topbarHeight = topbarRef.current?.offsetHeight ?? 64;
-      const maxViewerHeight = Math.max(
-        MIN_VIEWER_HEIGHT,
-        shellElement.clientHeight - titlebarHeight - topbarHeight - MIN_TRANSPORT_HEIGHT - RESIZER_HEIGHT,
+      const maxControlsHeight = Math.max(
+        MIN_CONTROLS_HEIGHT,
+        shellElement.clientHeight - titlebarHeight - MIN_VIEWER_HEIGHT,
       );
 
-      const nextHeight = startHeight + (moveEvent.clientY - startY);
-      setViewerHeightPx(clampNumber(nextHeight, MIN_VIEWER_HEIGHT, maxViewerHeight));
+      // Dragging upward increases controls area; dragging downward decreases it.
+      const nextHeight = startHeight + (startY - moveEvent.clientY);
+      setControlsHeightPx(clampNumber(nextHeight, MIN_CONTROLS_HEIGHT, maxControlsHeight));
     }
 
     function handlePointerUp() {
@@ -208,13 +184,10 @@ function App() {
       className="grid min-h-screen overflow-hidden bg-gradient-to-b from-[#181c23] to-[#14181e]"
       ref={shellRef}
       style={{
-        gridTemplateRows: `auto auto ${viewerHeightPx}px ${RESIZER_HEIGHT}px auto`,
+        gridTemplateRows: `auto minmax(0, 1fr) ${controlsHeightPx}px`,
       }}
     >
-      <div
-        ref={titlebarRef}
-        className="flex h-8 items-center bg-[#14181e] px-2 [app-region:drag]"
-      >
+      <div ref={titlebarRef} className="flex h-8 items-center bg-[#14181e] px-2 [app-region:drag]">
         <FileMenuForm
           isOpen={isFileMenuOpen}
           recentVideos={recentVideos}
@@ -234,8 +207,6 @@ function App() {
         <Player
           videoFile={videoFile}
           videoRef={videoRef}
-          isImporting={isImporting}
-          onOpenVideo={openVideo}
           onLoadedMetadata={(loadedDurationMs, videoName) => {
             setDurationMs(loadedDurationMs);
             setCurrentTimeMs(0);
@@ -251,29 +222,29 @@ function App() {
         />
       </main>
 
-      <div
-        className="relative cursor-row-resize border-y border-y-[#303846] border-t-[#2a313d] bg-gradient-to-b from-[#202630] to-[#1b2029] hover:from-[#242c37] hover:to-[#1d2330]"
-        role="separator"
-        aria-label="Resize video viewer"
-        aria-orientation="horizontal"
-        onPointerDown={startViewerResize}
-      >
-        <span className="absolute left-1/2 top-1/2 h-0.5 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#5f6b7e]" />
-      </div>
+      <div className="relative h-full min-h-[120px]">
+        <div
+          className="absolute left-0 right-0 top-0 z-10 h-2 -translate-y-1/2 cursor-row-resize [app-region:no-drag]"
+          role="separator"
+          aria-label="Resize playback controls"
+          aria-orientation="horizontal"
+          onPointerDown={startControlsResize}
+        />
 
-      <PlayerControls
-        hasVideo={hasVideo}
-        isImporting={isImporting}
-        isPlaying={isPlaying}
-        currentTimeMs={currentTimeMs}
-        durationMs={durationMs}
-        playheadPercent={playheadPercent}
-        statusMessage={statusMessage}
-        onSkipBack={() => skipBy(-2)}
-        onTogglePlayback={togglePlayback}
-        onSkipForward={() => skipBy(2)}
-        onSeek={seekTo}
-      />
+        <PlayerControls
+          hasVideo={hasVideo}
+          isImporting={isImporting}
+          isPlaying={isPlaying}
+          currentTimeMs={currentTimeMs}
+          durationMs={durationMs}
+          playheadPercent={playheadPercent}
+          statusMessage={statusMessage}
+          onSkipBack={() => skipBy(-2)}
+          onTogglePlayback={togglePlayback}
+          onSkipForward={() => skipBy(2)}
+          onSeek={seekTo}
+        />
+      </div>
     </div>
   );
 }
