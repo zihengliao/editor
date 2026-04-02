@@ -103,15 +103,6 @@ export function Player({
     return (
       <section className="h-full min-h-[220px] w-full rounded-[10px] border border-[#303743] bg-[#0b0d11] text-center text-[#9aa4b3] grid place-content-center gap-2.5">
         <h2 className="text-2xl font-semibold text-[#d8dee8]">No footage loaded</h2>
-        <p>Choose a local game file to start playback.</p>
-        <button
-          type="button"
-          className="mx-auto rounded-lg border border-[#ea580c] bg-gradient-to-b from-[#fb923c] to-[#f97316] px-3 py-2 font-semibold text-[#fff7ed] transition enabled:hover:from-[#fd9f52] enabled:hover:to-[#ea580c] disabled:cursor-not-allowed disabled:opacity-45"
-          onClick={onOpenVideo}
-          disabled={isImporting}
-        >
-          {isImporting ? "Importing..." : "Open Video"}
-        </button>
       </section>
     );
   }

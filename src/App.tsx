@@ -1,8 +1,9 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { FileMenuForm } from "./components/FileMenuForm";
 import { Player } from "./components/Player";
 import { PlayerControls } from "./components/playercontrols";
 import { usePlaybackController } from "./hooks/usePlaybackController";
-import type { VideoFile } from "./types";
+import type { RecentVideo, VideoFile } from "./types";
 import { clampNumber, formatClockTime } from "./utils/time";
 
 const VIEWER_HEIGHT_STORAGE_KEY = "courtcut.viewer-height";
@@ -10,6 +11,7 @@ const DEFAULT_VIEWER_HEIGHT = 420;
 const MIN_VIEWER_HEIGHT = 220;
 const MIN_TRANSPORT_HEIGHT = 130;
 const RESIZER_HEIGHT = 8;
+const RECENT_VIDEOS_STORAGE_KEY = "courtcut.recent-videos";
 
 function getInitialViewerHeight(): number {
   const rawValue = Number(window.localStorage.getItem(VIEWER_HEIGHT_STORAGE_KEY));
@@ -21,6 +23,7 @@ function getInitialViewerHeight(): number {
 function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const titlebarRef = useRef<HTMLDivElement | null>(null);
   const topbarRef = useRef<HTMLElement | null>(null);
 
   const [videoFile, setVideoFile] = useState<VideoFile | null>(null);
@@ -29,6 +32,8 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [viewerHeightPx, setViewerHeightPx] = useState(getInitialViewerHeight);
+  const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
+  const [recentVideos, setRecentVideos] = useState<RecentVideo[]>([]);
   const [statusMessage, setStatusMessage] = useState(
     "Open a local game file to preview footage.",
   );
@@ -51,16 +56,47 @@ function App() {
   }, [viewerHeightPx]);
 
   useEffect(() => {
+    try {
+      const rawValue = window.localStorage.getItem(RECENT_VIDEOS_STORAGE_KEY);
+      if (!rawValue) {
+        return;
+      }
+
+      const parsed = JSON.parse(rawValue);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      const validEntries = parsed.filter(
+        (entry) =>
+          entry &&
+          typeof entry.path === "string" &&
+          typeof entry.name === "string" &&
+          entry.path.length > 0,
+      );
+
+      setRecentVideos(validEntries.slice(0, 8));
+    } catch {
+      setRecentVideos([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(RECENT_VIDEOS_STORAGE_KEY, JSON.stringify(recentVideos));
+  }, [recentVideos]);
+
+  useEffect(() => {
     function clampViewerForWindow() {
       const shellElement = shellRef.current;
       if (!shellElement) {
         return;
       }
 
+      const titlebarHeight = titlebarRef.current?.offsetHeight ?? 32;
       const topbarHeight = topbarRef.current?.offsetHeight ?? 64;
       const maxViewerHeight = Math.max(
         MIN_VIEWER_HEIGHT,
-        shellElement.clientHeight - topbarHeight - MIN_TRANSPORT_HEIGHT - RESIZER_HEIGHT,
+        shellElement.clientHeight - titlebarHeight - topbarHeight - MIN_TRANSPORT_HEIGHT - RESIZER_HEIGHT,
       );
 
       setViewerHeightPx((currentHeight) => clampNumber(currentHeight, MIN_VIEWER_HEIGHT, maxViewerHeight));
@@ -87,6 +123,10 @@ function App() {
       }
 
       setVideoFile(selectedVideo);
+      setRecentVideos((currentVideos) => {
+        const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
+        return [{ path: selectedVideo.path, name: selectedVideo.name }, ...deduped].slice(0, 8);
+      });
       setCurrentTimeMs(0);
       setDurationMs(0);
       setIsPlaying(false);
@@ -95,6 +135,37 @@ function App() {
       setStatusMessage(`Could not open video: ${(error as Error).message}`);
     } finally {
       setIsImporting(false);
+    }
+  }
+
+  async function openRecentVideo(videoPath: string) {
+    const currentVideoElement = videoRef.current;
+    currentVideoElement?.pause();
+    setIsPlaying(false);
+    setIsImporting(true);
+    setStatusMessage("Opening recent video...");
+
+    try {
+      const selectedVideo = await window.coachEditor.openVideoFromPath(videoPath);
+      if (!selectedVideo) {
+        setStatusMessage("Could not open recent video.");
+        return;
+      }
+
+      setVideoFile(selectedVideo);
+      setRecentVideos((currentVideos) => {
+        const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
+        return [{ path: selectedVideo.path, name: selectedVideo.name }, ...deduped].slice(0, 8);
+      });
+      setCurrentTimeMs(0);
+      setDurationMs(0);
+      setIsPlaying(false);
+      setStatusMessage(`Loaded ${selectedVideo.name} (playback proxy).`);
+    } catch (error) {
+      setStatusMessage(`Could not open recent video: ${(error as Error).message}`);
+    } finally {
+      setIsImporting(false);
+      setIsFileMenuOpen(false);
     }
   }
 
@@ -110,10 +181,11 @@ function App() {
         return;
       }
 
+      const titlebarHeight = titlebarRef.current?.offsetHeight ?? 32;
       const topbarHeight = topbarRef.current?.offsetHeight ?? 64;
       const maxViewerHeight = Math.max(
         MIN_VIEWER_HEIGHT,
-        shellElement.clientHeight - topbarHeight - MIN_TRANSPORT_HEIGHT - RESIZER_HEIGHT,
+        shellElement.clientHeight - titlebarHeight - topbarHeight - MIN_TRANSPORT_HEIGHT - RESIZER_HEIGHT,
       );
 
       const nextHeight = startHeight + (moveEvent.clientY - startY);
@@ -136,38 +208,27 @@ function App() {
       className="grid min-h-screen overflow-hidden bg-gradient-to-b from-[#181c23] to-[#14181e]"
       ref={shellRef}
       style={{
-        gridTemplateRows: `auto ${viewerHeightPx}px ${RESIZER_HEIGHT}px auto`,
+        gridTemplateRows: `auto auto ${viewerHeightPx}px ${RESIZER_HEIGHT}px auto`,
       }}
     >
-      <header
-        ref={topbarRef}
-        className="flex h-16 items-center justify-between gap-3 border-b border-[#303743] bg-gradient-to-b from-[#1f242d] to-[#1b2028] px-4 py-2.5 max-[860px]:h-auto max-[860px]:flex-col max-[860px]:items-start"
+      <div
+        ref={titlebarRef}
+        className="flex h-8 items-center bg-[#14181e] px-2 [app-region:drag]"
       >
-
-
-
-        <div className="flex items-center gap-2.5 max-[860px]:w-full max-[860px]:flex-wrap">
-          <span
-            className="max-w-80 overflow-hidden text-ellipsis whitespace-nowrap rounded-[9px] border border-[#303743] bg-[#181c23] px-2.5 py-2 text-xs text-[#9aa4b3] max-[860px]:max-w-full max-[860px]:flex-1"
-            title={videoFile?.path ?? "No file loaded"}
-          >
-            {videoFile?.name ?? "No video loaded"}
-          </span>
-          {isImporting ? (
-            <span className="rounded-full border border-[#4a5364] bg-[rgba(249,115,22,0.15)] px-2.5 py-1.5 text-[11px] text-[#ffd9b3]">
-              Transcoding...
-            </span>
-          ) : null}
-          <button
-            type="button"
-            className="rounded-lg border border-[#ea580c] bg-gradient-to-b from-[#fb923c] to-[#f97316] px-3 py-2 font-semibold text-[#fff7ed] transition enabled:hover:from-[#fd9f52] enabled:hover:to-[#ea580c] disabled:cursor-not-allowed disabled:opacity-45"
-            onClick={openVideo}
-            disabled={isImporting}
-          >
-            {isImporting ? "Importing..." : "Open Video"}
-          </button>
-        </div>
-      </header>
+        <FileMenuForm
+          isOpen={isFileMenuOpen}
+          recentVideos={recentVideos}
+          onToggle={() => setIsFileMenuOpen((currentValue) => !currentValue)}
+          onClose={() => setIsFileMenuOpen(false)}
+          onOpenVideo={() => {
+            setIsFileMenuOpen(false);
+            void openVideo();
+          }}
+          onOpenRecent={(videoPath) => {
+            void openRecentVideo(videoPath);
+          }}
+        />
+      </div>
 
       <main className="min-h-0 p-3.5">
         <Player

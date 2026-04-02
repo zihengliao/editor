@@ -5,9 +5,11 @@ const { createHash } = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const ffmpegPath = require("ffmpeg-static");
+const { setupAppMenu } = require("./menu/appMenu.cjs");
 
 const IPC_CHANNELS = {
   OPEN_VIDEO: "video:open",
+  OPEN_VIDEO_PATH: "video:openFromPath",
   SAVE_PROJECT: "project:save",
   LOAD_PROJECT: "project:load",
   TO_FILE_URL: "path:toFileUrl",
@@ -130,6 +132,26 @@ function transcodeToPlaybackProxy({ inputPath, outputPath }) {
   });
 }
 
+async function prepareVideoForPlayback(filePath) {
+  const sourceStats = await fs.stat(filePath);
+  const { playbackCacheDir, proxyPath } = getPlaybackProxyPath(filePath, sourceStats);
+
+  await fs.mkdir(playbackCacheDir, { recursive: true });
+  await transcodeToPlaybackProxy({
+    inputPath: filePath,
+    outputPath: proxyPath,
+  });
+
+  const proxyUrl = pathToFileURL(proxyPath);
+  proxyUrl.searchParams.set("v", String(Date.now()));
+
+  return {
+    path: filePath,
+    name: path.basename(filePath),
+    url: proxyUrl.toString(),
+  };
+}
+
 /**
  * Runs ffmpeg to export a clipped segment and pushes progress updates
  * back to the renderer so the UI can show a progress bar.
@@ -204,6 +226,8 @@ function exportClipWithFfmpeg({ inputPath, outputPath, startMs, endMs, onProgres
 }
 
 function createMainWindow() {
+  const isMac = process.platform === "darwin";
+
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 780,
@@ -211,6 +235,14 @@ function createMainWindow() {
     minHeight: 620,
     backgroundColor: "#e3e5e8",
     autoHideMenuBar: true,
+    titleBarStyle: isMac ? "hiddenInset" : "hidden",
+    titleBarOverlay: isMac
+      ? false
+      : {
+          color: "#14181e",
+          symbolColor: "#d8dee8",
+          height: 32,
+        },
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -221,6 +253,30 @@ function createMainWindow() {
   });
 
   if (isDev) {
+    // Make DevTools easy to open during development.
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+
+    mainWindow.webContents.on("before-input-event", (event, input) => {
+      const normalizedKey = String(input.key || "").toUpperCase();
+      const isInspectorShortcut =
+        input.type === "keyDown" &&
+        (input.control || input.meta) &&
+        input.shift &&
+        ["I", "J"].includes(normalizedKey);
+
+      if (!isInspectorShortcut) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools({ mode: "detach" });
+      }
+    });
+
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     return;
   }
@@ -245,23 +301,15 @@ function registerIpcHandlers() {
     }
 
     const filePath = result.filePaths[0];
-    const sourceStats = await fs.stat(filePath);
-    const { playbackCacheDir, proxyPath } = getPlaybackProxyPath(filePath, sourceStats);
+    return prepareVideoForPlayback(filePath);
+  });
 
-    await fs.mkdir(playbackCacheDir, { recursive: true });
-    await transcodeToPlaybackProxy({
-      inputPath: filePath,
-      outputPath: proxyPath,
-    });
+  ipcMain.handle(IPC_CHANNELS.OPEN_VIDEO_PATH, async (_event, videoPath) => {
+    if (!videoPath || typeof videoPath !== "string") {
+      return null;
+    }
 
-    const proxyUrl = pathToFileURL(proxyPath);
-    proxyUrl.searchParams.set("v", String(Date.now()));
-
-    return {
-      path: filePath,
-      name: path.basename(filePath),
-      url: proxyUrl.toString(),
-    };
+    return prepareVideoForPlayback(videoPath);
   });
 
   ipcMain.handle(IPC_CHANNELS.TO_FILE_URL, async (_event, filePath) => {
@@ -357,6 +405,7 @@ function registerIpcHandlers() {
 }
 
 app.whenReady().then(() => {
+  setupAppMenu(app);
   registerIpcHandlers();
   createMainWindow();
 

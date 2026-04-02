@@ -4,6 +4,11 @@ export interface VideoFile {
   url: string;
 }
 
+export interface RecentVideo {
+  path: string;
+  name: string;
+}
+
 export interface Tag {
   id: string;
   label: string;

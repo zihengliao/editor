@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 const IPC_CHANNELS = {
   OPEN_VIDEO: "video:open",
+  OPEN_VIDEO_PATH: "video:openFromPath",
   SAVE_PROJECT: "project:save",
   LOAD_PROJECT: "project:load",
   TO_FILE_URL: "path:toFileUrl",
@@ -11,6 +12,7 @@ const IPC_CHANNELS = {
 
 contextBridge.exposeInMainWorld("coachEditor", {
   openVideoFile: () => ipcRenderer.invoke(IPC_CHANNELS.OPEN_VIDEO),
+  openVideoFromPath: (videoPath) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_VIDEO_PATH, videoPath),
   saveProject: (project, suggestedName) =>
     ipcRenderer.invoke(IPC_CHANNELS.SAVE_PROJECT, { project, suggestedName }),
   loadProject: () => ipcRenderer.invoke(IPC_CHANNELS.LOAD_PROJECT),

@@ -9,6 +9,7 @@ import type {
 
 interface CoachEditorApi {
   openVideoFile: () => Promise<VideoFile | null>;
+  openVideoFromPath: (videoPath: string) => Promise<VideoFile | null>;
   saveProject: (
     project: EditorProject,
     suggestedName?: string,
