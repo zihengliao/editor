@@ -9,8 +9,8 @@ import { clampNumber, formatClockTime } from "./utils/time";
 const RECENT_VIDEOS_STORAGE_KEY = "courtcut.recent-videos";
 const CONTROLS_HEIGHT_STORAGE_KEY = "courtcut.controls-height";
 const DEFAULT_CONTROLS_HEIGHT = 170;
-const MIN_CONTROLS_HEIGHT = 120;
-const MIN_VIEWER_HEIGHT = 220;
+const MIN_CONTROLS_HEIGHT = 170;
+const MIN_VIEWER_HEIGHT = 120;
 
 function getInitialControlsHeight(): number {
   const rawValue = Number(window.localStorage.getItem(CONTROLS_HEIGHT_STORAGE_KEY));
@@ -82,6 +82,29 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(CONTROLS_HEIGHT_STORAGE_KEY, String(Math.round(controlsHeightPx)));
   }, [controlsHeightPx]);
+
+  useEffect(() => {
+    function clampControlsForWindow() {
+      const shellElement = shellRef.current;
+      if (!shellElement) {
+        return;
+      }
+
+      const titlebarHeight = titlebarRef.current?.offsetHeight ?? 32;
+      const maxControlsHeight = Math.max(
+        MIN_CONTROLS_HEIGHT,
+        shellElement.clientHeight - titlebarHeight - MIN_VIEWER_HEIGHT,
+      );
+
+      setControlsHeightPx((currentHeight) =>
+        clampNumber(currentHeight, MIN_CONTROLS_HEIGHT, maxControlsHeight),
+      );
+    }
+
+    clampControlsForWindow();
+    window.addEventListener("resize", clampControlsForWindow);
+    return () => window.removeEventListener("resize", clampControlsForWindow);
+  }, []);
 
   async function openVideo() {
     const currentVideoElement = videoRef.current;
@@ -181,7 +204,7 @@ function App() {
 
   return (
     <div
-      className="grid min-h-screen overflow-hidden bg-gradient-to-b from-[#181c23] to-[#14181e]"
+      className="grid h-screen overflow-hidden bg-gradient-to-b from-[#181c23] to-[#14181e]"
       ref={shellRef}
       style={{
         gridTemplateRows: `auto minmax(0, 1fr) ${controlsHeightPx}px`,
@@ -203,10 +226,11 @@ function App() {
         />
       </div>
 
-      <main className="min-h-0 p-3.5">
+      <main className="min-h-0 overflow-hidden p-3.5">
         <Player
           videoFile={videoFile}
           videoRef={videoRef}
+          layoutVersion={controlsHeightPx}
           onLoadedMetadata={(loadedDurationMs, videoName) => {
             setDurationMs(loadedDurationMs);
             setCurrentTimeMs(0);
@@ -222,9 +246,9 @@ function App() {
         />
       </main>
 
-      <div className="relative h-full min-h-[120px]">
+      <div className="relative h-full min-h-[170px]">
         <div
-          className="absolute left-0 right-0 top-0 z-10 h-2 -translate-y-1/2 cursor-row-resize [app-region:no-drag]"
+          className="absolute inset-x-0 top-0 z-20 h-1 cursor-row-resize [app-region:no-drag]"
           role="separator"
           aria-label="Resize playback controls"
           aria-orientation="horizontal"

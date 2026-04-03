@@ -1,4 +1,5 @@
 import { BackIcon, ForwardIcon, PauseIcon, PlayIcon } from "./TransportIcons";
+import { TimelineScrubber } from "./timeline/TimelineScrubber";
 import { formatClockTime } from "../utils/time";
 
 interface PlayerControlsProps {
@@ -29,7 +30,7 @@ export function PlayerControls({
   onSeek,
 }: PlayerControlsProps) {
   return (
-    <footer className="grid h-full gap-2.5 border-t border-[#303743] bg-gradient-to-b from-[#20252d] to-[#191e26] px-4 py-3">
+    <footer className="grid h-full content-start gap-2.5 border-t border-[#303743] bg-gradient-to-b from-[#20252d] to-[#191e26] px-4 py-3">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 max-[860px]:grid-cols-1 max-[860px]:justify-items-center max-[860px]:gap-2.5">
         <div className="min-w-0" aria-hidden="true" />
 
@@ -73,26 +74,14 @@ export function PlayerControls({
         </div>
       </div>
 
-      <div className="relative grid items-center">
-        <div className="pointer-events-none absolute left-1.5 right-1.5 h-1.5 rounded-full bg-[#596273]" aria-hidden="true">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-[#fb923c] to-[#f97316]"
-            style={{ width: `${playheadPercent}%` }}
-          />
-        </div>
-
-        <input
-          type="range"
-          className="h-4 w-full appearance-none bg-transparent accent-[#f97316] disabled:cursor-not-allowed disabled:opacity-45"
-          min={0}
-          max={Math.max(durationMs, 1)}
-          step={10}
-          value={Math.min(currentTimeMs, Math.max(durationMs, 1))}
-          onChange={(event) => onSeek(Number(event.target.value))}
-          disabled={!hasVideo || isImporting}
-          aria-label="Playback timeline"
-        />
-      </div>
+      <TimelineScrubber
+        hasVideo={hasVideo}
+        currentTimeMs={currentTimeMs}
+        durationMs={durationMs}
+        playheadPercent={playheadPercent}
+        isDisabled={!hasVideo || isImporting}
+        onSeek={onSeek}
+      />
 
       <p className="text-xs text-[#9aa4b3]">{statusMessage}</p>
     </footer>

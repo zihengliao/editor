@@ -32,6 +32,7 @@ function getContainedFrameSize(
 interface PlayerProps {
   videoFile: VideoFile | null;
   videoRef: RefObject<HTMLVideoElement | null>;
+  layoutVersion: number;
   onLoadedMetadata: (durationMs: number, videoName: string) => void;
   onTimeUpdate: (timeMs: number) => void;
   onError: (reason: string) => void;
@@ -41,6 +42,7 @@ interface PlayerProps {
 export function Player({
   videoFile,
   videoRef,
+  layoutVersion,
   onLoadedMetadata,
   onTimeUpdate,
   onError,
@@ -93,7 +95,7 @@ export function Player({
       window.cancelAnimationFrame(animationFrameId);
       observer.disconnect();
     };
-  }, [videoAspectRatio, videoFile?.url]);
+  }, [videoAspectRatio, videoFile?.url, layoutVersion]);
 
   if (!videoFile) {
     return (
@@ -104,7 +106,7 @@ export function Player({
   }
 
   return (
-    <div className="grid h-full min-h-[220px] w-full place-items-center overflow-hidden" ref={videoCanvasRef}>
+    <div className="grid h-full min-h-0 w-full place-items-center overflow-hidden" ref={videoCanvasRef}>
       <div
         className="grid place-items-center overflow-hidden rounded-[10px] border border-[#303743] bg-[#0b0d11]"
         style={{
