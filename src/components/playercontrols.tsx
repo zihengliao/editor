@@ -1,4 +1,4 @@
-import { BackIcon, CutIcon, ForwardIcon, PauseIcon, PlayIcon } from "./TransportIcons";
+import { BackIcon, CutIcon, DeleteIcon, ForwardIcon, PauseIcon, PlayIcon } from "./TransportIcons";
 import { TimelineScrubber } from "./timeline/TimelineScrubber";
 import { formatClockTime } from "../utils/time";
 import type { TimelineSegment } from "../timeline/types";
@@ -15,8 +15,11 @@ interface PlayerControlsProps {
   segments: TimelineSegment[];
   selectedSegmentId: string | null;
   canCut: boolean;
+  canDeleteSelected: boolean;
+  isTransportDisabled: boolean;
   onSkipBack: () => void;
   onCut: () => void;
+  onDeleteSelected: () => void;
   onTogglePlayback: () => void;
   onSkipForward: () => void;
   onSeek: (timeMs: number) => void;
@@ -35,8 +38,11 @@ export function PlayerControls({
   segments,
   selectedSegmentId,
   canCut,
+  canDeleteSelected,
+  isTransportDisabled,
   onSkipBack,
   onCut,
+  onDeleteSelected,
   onTogglePlayback,
   onSkipForward,
   onSeek,
@@ -52,7 +58,7 @@ export function PlayerControls({
             type="button"
             className="grid h-10 w-11 place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"
             onClick={onSkipBack}
-            disabled={!hasVideo || isImporting}
+            disabled={!hasVideo || isImporting || isTransportDisabled}
             aria-label="Skip backward 2 seconds"
           >
             <BackIcon />
@@ -62,7 +68,7 @@ export function PlayerControls({
             type="button"
             className="grid h-10 w-11 place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"
             onClick={onCut}
-            disabled={!hasVideo || isImporting || !canCut}
+            disabled={!hasVideo || isImporting || isTransportDisabled || !canCut}
             aria-label="Cut at playhead"
           >
             <CutIcon />
@@ -70,9 +76,19 @@ export function PlayerControls({
 
           <button
             type="button"
+            className="grid h-10 w-11 place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"
+            onClick={onDeleteSelected}
+            disabled={!hasVideo || isImporting || isTransportDisabled || !canDeleteSelected}
+            aria-label="Delete selected segment"
+          >
+            <DeleteIcon />
+          </button>
+
+          <button
+            type="button"
             className="grid h-10 w-[52px] place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"
             onClick={onTogglePlayback}
-            disabled={!hasVideo || isImporting}
+            disabled={!hasVideo || isImporting || isTransportDisabled}
             aria-label={isPlaying ? "Pause video" : "Play video"}
           >
             {isPlaying ? <PauseIcon /> : <PlayIcon />}
@@ -82,7 +98,7 @@ export function PlayerControls({
             type="button"
             className="grid h-10 w-11 place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"
             onClick={onSkipForward}
-            disabled={!hasVideo || isImporting}
+            disabled={!hasVideo || isImporting || isTransportDisabled}
             aria-label="Skip forward 2 seconds"
           >
             <ForwardIcon />

@@ -10,6 +10,7 @@ interface UseProjectControllerParams {
   durationMs: number;
   controlsHeightPx: number;
   cutsMs: number[];
+  retainedRanges: Array<{ startMs: number; endMs: number }>;
   setVideoFile: (video: VideoFile | null) => void;
   setCurrentTimeMs: (timeMs: number) => void;
   setDurationMs: (durationMs: number) => void;
@@ -19,7 +20,11 @@ interface UseProjectControllerParams {
   setStatusMessage: (message: string) => void;
   setIsFileMenuOpen: (isOpen: boolean) => void;
   setRecentVideos: React.Dispatch<React.SetStateAction<RecentVideo[]>>;
-  setCutsFromProject: (cutsMs: number[]) => void;
+  setTimelineFromProject: (timeline: {
+    durationMs: number;
+    cutsMs: number[];
+    retainedRanges: Array<{ startMs: number; endMs: number }>;
+  }) => void;
   clampControlsHeight: (heightPx: number) => number;
   videoRef: React.RefObject<HTMLVideoElement | null>;
 }
@@ -30,6 +35,7 @@ export function useProjectController({
   durationMs,
   controlsHeightPx,
   cutsMs,
+  retainedRanges,
   setVideoFile,
   setCurrentTimeMs,
   setDurationMs,
@@ -39,7 +45,7 @@ export function useProjectController({
   setStatusMessage,
   setIsFileMenuOpen,
   setRecentVideos,
-  setCutsFromProject,
+  setTimelineFromProject,
   clampControlsHeight,
   videoRef,
 }: UseProjectControllerParams) {
@@ -76,10 +82,14 @@ export function useProjectController({
       }
 
       setVideoFile(loadedVideo);
-      setDurationMs(0);
+      setDurationMs(Math.max(0, parsedProject.media.durationMs));
       pendingSeekMsRef.current = Math.max(0, parsedProject.timeline.currentTimeMs);
       setCurrentTimeMs(pendingSeekMsRef.current);
-      setCutsFromProject(parsedProject.timeline.cutsMs);
+      setTimelineFromProject({
+        durationMs: parsedProject.media.durationMs,
+        cutsMs: parsedProject.timeline.cutsMs,
+        retainedRanges: parsedProject.timeline.retainedRanges,
+      });
       setControlsHeightPx(clampControlsHeight(parsedProject.ui.controlsHeightPx));
 
       setRecentVideos((currentVideos) => {
@@ -104,7 +114,7 @@ export function useProjectController({
     setIsImporting,
     setIsPlaying,
     setRecentVideos,
-    setCutsFromProject,
+    setTimelineFromProject,
     setStatusMessage,
     setVideoFile,
   ]);
@@ -123,6 +133,7 @@ export function useProjectController({
       durationMs,
       controlsHeightPx,
       cutsMs,
+      retainedRanges,
     });
 
     const result = await window.coachEditor.saveProject(
@@ -142,6 +153,7 @@ export function useProjectController({
     currentTimeMs,
     durationMs,
     cutsMs,
+    retainedRanges,
     setIsFileMenuOpen,
     setStatusMessage,
     videoFile,

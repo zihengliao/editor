@@ -7,6 +7,7 @@ interface CreateProjectParams {
   durationMs: number;
   controlsHeightPx: number;
   cutsMs: number[];
+  retainedRanges: Array<{ startMs: number; endMs: number }>;
 }
 
 export function buildProjectFile({
@@ -15,6 +16,7 @@ export function buildProjectFile({
   durationMs,
   controlsHeightPx,
   cutsMs,
+  retainedRanges,
 }: CreateProjectParams): EditorProjectFile {
   const projectName = videoFile.name.replace(/\.[^.]+$/, "");
 
@@ -30,6 +32,7 @@ export function buildProjectFile({
     timeline: {
       currentTimeMs,
       cutsMs,
+      retainedRanges,
     },
     ui: {
       controlsHeightPx,

@@ -90,3 +90,14 @@ export function CutIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function DeleteIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false">
+      <path
+        d="M8 7V5.5C8 4.7 8.7 4 9.5 4H14.5C15.3 4 16 4.7 16 5.5V7H19V9H18V18C18 19.1 17.1 20 16 20H8C6.9 20 6 19.1 6 18V9H5V7H8ZM10 7H14V6H10V7ZM8 9V18H16V9H8ZM10 11H12V16H10V11ZM14 11H12V16H14V11Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}

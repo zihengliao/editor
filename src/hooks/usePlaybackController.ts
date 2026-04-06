@@ -7,6 +7,7 @@ interface UsePlaybackControllerParams {
   currentTimeMs: number;
   durationMs: number;
   isImporting: boolean;
+  isPlaybackDisabled: boolean;
   setCurrentTimeMs: Dispatch<SetStateAction<number>>;
   setStatusMessage: Dispatch<SetStateAction<string>>;
 }
@@ -16,23 +17,31 @@ export function usePlaybackController({
   currentTimeMs,
   durationMs,
   isImporting,
+  isPlaybackDisabled,
   setCurrentTimeMs,
   setStatusMessage,
 }: UsePlaybackControllerParams) {
   const currentTimeRef = useRef(currentTimeMs);
   const durationRef = useRef(durationMs);
   const isImportingRef = useRef(isImporting);
+  const isPlaybackDisabledRef = useRef(isPlaybackDisabled);
 
   useEffect(() => {
     currentTimeRef.current = currentTimeMs;
     durationRef.current = durationMs;
     isImportingRef.current = isImporting;
-  }, [currentTimeMs, durationMs, isImporting]);
+    isPlaybackDisabledRef.current = isPlaybackDisabled;
+  }, [currentTimeMs, durationMs, isImporting, isPlaybackDisabled]);
 
   const seekTo = useCallback(
     (nextTimeMs: number) => {
       const videoElement = videoRef.current;
-      if (!videoElement || durationRef.current <= 0 || isImportingRef.current) {
+      if (
+        !videoElement ||
+        durationRef.current <= 0 ||
+        isImportingRef.current ||
+        isPlaybackDisabledRef.current
+      ) {
         return;
       }
 
@@ -52,7 +61,7 @@ export function usePlaybackController({
 
   const togglePlayback = useCallback(() => {
     const videoElement = videoRef.current;
-    if (!videoElement || isImportingRef.current) {
+    if (!videoElement || isImportingRef.current || isPlaybackDisabledRef.current) {
       return;
     }
 
@@ -75,7 +84,12 @@ export function usePlaybackController({
         target instanceof HTMLTextAreaElement ||
         target?.isContentEditable;
 
-      if (isTypingIntoField || isImportingRef.current || !videoRef.current) {
+      if (
+        isTypingIntoField ||
+        isImportingRef.current ||
+        isPlaybackDisabledRef.current ||
+        !videoRef.current
+      ) {
         return;
       }
 

@@ -29,6 +29,40 @@ export function parseEditorProject(value: unknown): EditorProjectFile {
     throw new Error("Project UI metadata is invalid.");
   }
 
+  const parsedCutsMs = timeline.cutsMs.filter((point): point is number => typeof point === "number");
+
+  const parsedRetainedRanges = Array.isArray(timeline.retainedRanges)
+    ? timeline.retainedRanges
+        .filter(
+          (range): range is { startMs: number; endMs: number } =>
+            isRecord(range) && typeof range.startMs === "number" && typeof range.endMs === "number",
+        )
+        .map((range) => ({
+          startMs: range.startMs,
+          endMs: range.endMs,
+        }))
+    : [];
+
+  const fallbackRetainedRanges = (() => {
+    const durationMs = typeof media.durationMs === "number" ? media.durationMs : 0;
+    if (durationMs <= 0) {
+      return [];
+    }
+
+    const boundaries = [0, ...parsedCutsMs, durationMs].sort((left, right) => left - right);
+    const ranges: Array<{ startMs: number; endMs: number }> = [];
+
+    for (let index = 0; index < boundaries.length - 1; index += 1) {
+      const startMs = boundaries[index];
+      const endMs = boundaries[index + 1];
+      if (endMs > startMs) {
+        ranges.push({ startMs, endMs });
+      }
+    }
+
+    return ranges;
+  })();
+
   return {
     version: 1,
     projectName: typeof value.projectName === "string" ? value.projectName : media.fileName,
@@ -40,7 +74,8 @@ export function parseEditorProject(value: unknown): EditorProjectFile {
     },
     timeline: {
       currentTimeMs: timeline.currentTimeMs,
-      cutsMs: timeline.cutsMs.filter((point): point is number => typeof point === "number"),
+      cutsMs: parsedCutsMs,
+      retainedRanges: parsedRetainedRanges.length > 0 ? parsedRetainedRanges : fallbackRetainedRanges,
     },
     ui: {
       controlsHeightPx: ui.controlsHeightPx,

@@ -1,4 +1,11 @@
-import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FileMenuForm } from "./components/FileMenuForm";
 import { Player } from "./components/Player";
 import { PlayerControls } from "./components/playercontrols";
@@ -35,26 +42,47 @@ function App() {
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [controlsHeightPx, setControlsHeightPx] = useState(getInitialControlsHeight);
   const [recentVideos, setRecentVideos] = useState<RecentVideo[]>([]);
+  const [shouldResetTimelineOnMetadata, setShouldResetTimelineOnMetadata] = useState(false);
   const [statusMessage, setStatusMessage] = useState(
     "Open a local game file to preview footage.",
   );
 
   const hasVideo = Boolean(videoFile);
+  const {
+    ranges,
+    cutsMs,
+    segments,
+    editedDurationMs,
+    sourceMsToEditedMs,
+    editedMsToSourceMs,
+    alignSourceTimeToRetainedRange,
+    canCutAt,
+    addCutAt,
+    deleteSegmentById,
+    setCutsFromProject,
+    setRangesFromProject,
+    resetToFullDuration,
+    clearCuts,
+  } = useTimelineCuts(durationMs);
+  const { selectedSegmentId, selectSegment, clearSelectedSegment } = useTimelineSelection(segments);
+
+  const currentEditedTimeMs = useMemo(
+    () => sourceMsToEditedMs(currentTimeMs),
+    [sourceMsToEditedMs, currentTimeMs],
+  );
+  const hasRetainedSegments = editedDurationMs > 0;
   const playheadPercent =
-    durationMs > 0 ? clampNumber((currentTimeMs / durationMs) * 100, 0, 100) : 0;
+    editedDurationMs > 0 ? clampNumber((currentEditedTimeMs / editedDurationMs) * 100, 0, 100) : 0;
 
   const { seekTo, skipBy, togglePlayback } = usePlaybackController({
     videoRef,
     currentTimeMs,
     durationMs,
     isImporting,
+    isPlaybackDisabled: !hasVideo || !hasRetainedSegments,
     setCurrentTimeMs,
     setStatusMessage,
   });
-
-  const { cutsMs, segments, canCutAt, addCutAt, setCutsFromProject, clearCuts } =
-    useTimelineCuts(durationMs);
-  const { selectedSegmentId, selectSegment, clearSelectedSegment } = useTimelineSelection(segments);
 
   function getMaxControlsHeight() {
     const shellElement = shellRef.current;
@@ -78,6 +106,7 @@ function App() {
     durationMs,
     controlsHeightPx,
     cutsMs,
+    retainedRanges: ranges.map((range) => ({ startMs: range.startMs, endMs: range.endMs })),
     setVideoFile,
     setCurrentTimeMs,
     setDurationMs,
@@ -87,7 +116,14 @@ function App() {
     setStatusMessage,
     setIsFileMenuOpen,
     setRecentVideos,
-    setCutsFromProject,
+    setTimelineFromProject: ({ durationMs: projectDurationMs, cutsMs: projectCuts, retainedRanges }) => {
+      if (retainedRanges.length > 0 || projectCuts.length === 0) {
+        setRangesFromProject(retainedRanges);
+        return;
+      }
+
+      setCutsFromProject(projectCuts, projectDurationMs);
+    },
     clampControlsHeight: (heightPx) =>
       clampNumber(heightPx, MIN_CONTROLS_HEIGHT, getMaxControlsHeight()),
     videoRef,
@@ -165,6 +201,7 @@ function App() {
       setVideoFile(selectedVideo);
       clearCuts();
       clearSelectedSegment();
+      setShouldResetTimelineOnMetadata(true);
       markProjectDirty();
       setRecentVideos((currentVideos) => {
         const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
@@ -198,6 +235,7 @@ function App() {
       setVideoFile(selectedVideo);
       clearCuts();
       clearSelectedSegment();
+      setShouldResetTimelineOnMetadata(true);
       markProjectDirty();
       setRecentVideos((currentVideos) => {
         const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
@@ -250,8 +288,8 @@ function App() {
     window.addEventListener("pointerup", handlePointerUp);
   }
 
-  function cutAtPlayhead() {
-    if (!hasVideo) {
+  const cutAtPlayhead = useCallback(() => {
+    if (!hasVideo || !hasRetainedSegments) {
       return;
     }
 
@@ -263,7 +301,100 @@ function App() {
 
     markProjectDirty();
     setStatusMessage(`Cut added at ${formatClockTime(currentTimeMs)}.`);
-  }
+  }, [hasVideo, hasRetainedSegments, addCutAt, currentTimeMs, markProjectDirty]);
+
+  const deleteSelectedSegment = useCallback(() => {
+    if (!selectedSegmentId) {
+      return;
+    }
+
+    const selectedSegment = segments.find((segment) => segment.id === selectedSegmentId);
+    if (!selectedSegment) {
+      clearSelectedSegment();
+      return;
+    }
+
+    const didDelete = deleteSegmentById(selectedSegmentId);
+    if (!didDelete) {
+      return;
+    }
+
+    clearSelectedSegment();
+    markProjectDirty();
+
+    const nextRanges = ranges.filter((range) => range.id !== selectedSegmentId);
+    if (nextRanges.length === 0) {
+      videoRef.current?.pause();
+      setIsPlaying(false);
+      setCurrentTimeMs(0);
+      setStatusMessage("No retained segments. Add/import timeline data to continue editing.");
+      return;
+    }
+
+    const nextEditedDurationMs = nextRanges.reduce(
+      (totalDuration, range) => totalDuration + Math.max(range.endMs - range.startMs, 0),
+      0,
+    );
+    const targetEditedMs = clampNumber(currentEditedTimeMs, 0, nextEditedDurationMs);
+
+    let editedCursorMs = 0;
+    let nextSourceTimeMs = nextRanges[nextRanges.length - 1].endMs;
+
+    for (let index = 0; index < nextRanges.length; index += 1) {
+      const range = nextRanges[index];
+      const rangeDurationMs = Math.max(range.endMs - range.startMs, 0);
+      const nextEditedCursorMs = editedCursorMs + rangeDurationMs;
+
+      if (targetEditedMs <= nextEditedCursorMs) {
+        nextSourceTimeMs = range.startMs + (targetEditedMs - editedCursorMs);
+        break;
+      }
+
+      editedCursorMs = nextEditedCursorMs;
+    }
+
+    const videoElement = videoRef.current;
+    if (videoElement) {
+      videoElement.currentTime = nextSourceTimeMs / 1000;
+    }
+    setCurrentTimeMs(nextSourceTimeMs);
+
+    setStatusMessage(
+      `Deleted segment ${formatClockTime(selectedSegment.sourceStartMs)} - ${formatClockTime(selectedSegment.sourceEndMs)}.`,
+    );
+  }, [
+    currentEditedTimeMs,
+    selectedSegmentId,
+    segments,
+    ranges,
+    clearSelectedSegment,
+    deleteSegmentById,
+    markProjectDirty,
+  ]);
+
+  useEffect(() => {
+    function handleDeleteShortcut(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const isTypingIntoField =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable;
+
+      if (isTypingIntoField || !selectedSegmentId) {
+        return;
+      }
+
+      if (event.key !== "Delete" && event.key !== "Backspace") {
+        return;
+      }
+
+      event.preventDefault();
+      deleteSelectedSegment();
+    }
+
+    window.addEventListener("keydown", handleDeleteShortcut);
+    return () => window.removeEventListener("keydown", handleDeleteShortcut);
+  }, [selectedSegmentId, deleteSelectedSegment]);
 
   return (
     <div
@@ -286,6 +417,7 @@ function App() {
           }}
           onImportProject={() => {
             clearSelectedSegment();
+            setShouldResetTimelineOnMetadata(false);
             void importProject();
           }}
           onSaveProject={() => {
@@ -304,10 +436,35 @@ function App() {
           layoutVersion={controlsHeightPx}
           onLoadedMetadata={(loadedDurationMs, videoName) => {
             setDurationMs(loadedDurationMs);
+            if (shouldResetTimelineOnMetadata) {
+              resetToFullDuration(loadedDurationMs);
+              setShouldResetTimelineOnMetadata(false);
+            }
             setCurrentTimeMs(applyPendingProjectSeek(loadedDurationMs));
             setStatusMessage(`Ready: ${videoName} (${formatClockTime(loadedDurationMs)}).`);
           }}
           onTimeUpdate={(timeMs) => {
+            const alignedSourceTime = alignSourceTimeToRetainedRange(timeMs);
+
+            if (alignedSourceTime === null) {
+              const videoElement = videoRef.current;
+              if (videoElement) {
+                videoElement.pause();
+              }
+              setIsPlaying(false);
+              setCurrentTimeMs(0);
+              return;
+            }
+
+            if (alignedSourceTime !== timeMs) {
+              const videoElement = videoRef.current;
+              if (videoElement) {
+                videoElement.currentTime = alignedSourceTime / 1000;
+              }
+              setCurrentTimeMs(alignedSourceTime);
+              return;
+            }
+
             setCurrentTimeMs(timeMs);
           }}
           onError={(reason) => {
@@ -330,19 +487,22 @@ function App() {
           hasVideo={hasVideo}
           isImporting={isImporting}
           isPlaying={isPlaying}
-          currentTimeMs={currentTimeMs}
-          durationMs={durationMs}
+          currentTimeMs={currentEditedTimeMs}
+          durationMs={editedDurationMs}
           playheadPercent={playheadPercent}
           statusMessage={statusMessage}
           cutsMs={cutsMs}
           segments={segments}
           selectedSegmentId={selectedSegmentId}
-          canCut={canCutAt(currentTimeMs)}
+          canCut={hasRetainedSegments && canCutAt(currentTimeMs)}
+          canDeleteSelected={selectedSegmentId !== null}
+          isTransportDisabled={!hasRetainedSegments}
           onSkipBack={() => skipBy(-2)}
           onCut={cutAtPlayhead}
+          onDeleteSelected={deleteSelectedSegment}
           onTogglePlayback={togglePlayback}
           onSkipForward={() => skipBy(2)}
-          onSeek={seekTo}
+          onSeek={(editedTimeMs) => seekTo(editedMsToSourceMs(editedTimeMs))}
           onSelectSegment={selectSegment}
         />
       </div>

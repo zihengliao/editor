@@ -197,6 +197,7 @@ export function TimelineScrubber({
                     left: `${leftPercent}%`,
                     width: `${widthPercent}%`,
                   }}
+                  disabled={isDisabled}
                   aria-label={`Select segment ${formatTimelineLabel(segment.startMs)} to ${formatTimelineLabel(segment.endMs)}`}
                   onClick={() => onSelectSegment(segment.id)}
                 />

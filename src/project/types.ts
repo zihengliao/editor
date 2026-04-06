@@ -4,9 +4,15 @@ export interface EditorProjectMedia {
   durationMs: number;
 }
 
+export interface EditorProjectRetainedRange {
+  startMs: number;
+  endMs: number;
+}
+
 export interface EditorProjectTimeline {
   currentTimeMs: number;
   cutsMs: number[];
+  retainedRanges: EditorProjectRetainedRange[];
 }
 
 export interface EditorProjectUi {
