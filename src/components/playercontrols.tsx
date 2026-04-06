@@ -1,6 +1,7 @@
-import { BackIcon, ForwardIcon, PauseIcon, PlayIcon } from "./TransportIcons";
+import { BackIcon, CutIcon, ForwardIcon, PauseIcon, PlayIcon } from "./TransportIcons";
 import { TimelineScrubber } from "./timeline/TimelineScrubber";
 import { formatClockTime } from "../utils/time";
+import type { TimelineSegment } from "../timeline/types";
 
 interface PlayerControlsProps {
   hasVideo: boolean;
@@ -10,7 +11,11 @@ interface PlayerControlsProps {
   durationMs: number;
   playheadPercent: number;
   statusMessage: string;
+  cutsMs: number[];
+  segments: TimelineSegment[];
+  canCut: boolean;
   onSkipBack: () => void;
+  onCut: () => void;
   onTogglePlayback: () => void;
   onSkipForward: () => void;
   onSeek: (timeMs: number) => void;
@@ -24,7 +29,11 @@ export function PlayerControls({
   durationMs,
   playheadPercent,
   statusMessage,
+  cutsMs,
+  segments,
+  canCut,
   onSkipBack,
+  onCut,
   onTogglePlayback,
   onSkipForward,
   onSeek,
@@ -43,6 +52,16 @@ export function PlayerControls({
             aria-label="Skip backward 2 seconds"
           >
             <BackIcon />
+          </button>
+
+          <button
+            type="button"
+            className="grid h-10 w-11 place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"
+            onClick={onCut}
+            disabled={!hasVideo || isImporting || !canCut}
+            aria-label="Cut at playhead"
+          >
+            <CutIcon />
           </button>
 
           <button
@@ -76,6 +95,8 @@ export function PlayerControls({
 
       <TimelineScrubber
         hasVideo={hasVideo}
+        cutsMs={cutsMs}
+        segments={segments}
         currentTimeMs={currentTimeMs}
         durationMs={durationMs}
         playheadPercent={playheadPercent}

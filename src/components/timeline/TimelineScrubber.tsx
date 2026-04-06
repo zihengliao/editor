@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { TimelineSegment } from "../../timeline/types";
 
 interface TimelineScrubberProps {
   hasVideo: boolean;
+  cutsMs: number[];
+  segments: TimelineSegment[];
   currentTimeMs: number;
   durationMs: number;
   playheadPercent: number;
@@ -57,6 +60,8 @@ function buildMajorTickLabels(durationMs: number, rulerWidthPx: number): Timelin
 
 export function TimelineScrubber({
   hasVideo,
+  cutsMs,
+  segments,
   currentTimeMs,
   durationMs,
   playheadPercent,
@@ -160,10 +165,30 @@ export function TimelineScrubber({
 
       <div className="relative h-10 bg-[#1b2028] py-2">
         {hasVideo ? (
-          <div
-            className="h-full w-full border border-[#2a5b86] bg-gradient-to-r from-[#3d78aa] to-[#3f79ab]"
-            aria-hidden="true"
-          />
+          <div className="relative h-full w-full" aria-hidden="true">
+            <div className="h-full w-full border border-[#2a5b86] bg-gradient-to-r from-[#3d78aa] to-[#3f79ab]" />
+
+            {/* Draw cut separators as an overlay so boundaries align exactly to time position. */}
+            {cutsMs.map((cutMs) => {
+              const cutLeftPercent = durationMs > 0 ? (cutMs / durationMs) * 100 : 0;
+              return (
+                <span
+                  key={`cut-${cutMs}`}
+                  className="pointer-events-none absolute inset-y-0 w-px bg-[#1b2028]"
+                  style={{ left: `${cutLeftPercent}%` }}
+                />
+              );
+            })}
+
+            {/* Keep segments in DOM for upcoming selection/edit interactions. */}
+            <div className="sr-only">
+            {segments.map((segment) => (
+              <span key={segment.id}>
+                {segment.startMs}-{segment.endMs}
+              </span>
+            ))}
+            </div>
+          </div>
         ) : null}
       </div>
 

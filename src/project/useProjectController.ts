@@ -9,6 +9,7 @@ interface UseProjectControllerParams {
   currentTimeMs: number;
   durationMs: number;
   controlsHeightPx: number;
+  cutsMs: number[];
   setVideoFile: (video: VideoFile | null) => void;
   setCurrentTimeMs: (timeMs: number) => void;
   setDurationMs: (durationMs: number) => void;
@@ -18,6 +19,7 @@ interface UseProjectControllerParams {
   setStatusMessage: (message: string) => void;
   setIsFileMenuOpen: (isOpen: boolean) => void;
   setRecentVideos: React.Dispatch<React.SetStateAction<RecentVideo[]>>;
+  setCutsFromProject: (cutsMs: number[]) => void;
   clampControlsHeight: (heightPx: number) => number;
   videoRef: React.RefObject<HTMLVideoElement | null>;
 }
@@ -27,6 +29,7 @@ export function useProjectController({
   currentTimeMs,
   durationMs,
   controlsHeightPx,
+  cutsMs,
   setVideoFile,
   setCurrentTimeMs,
   setDurationMs,
@@ -36,6 +39,7 @@ export function useProjectController({
   setStatusMessage,
   setIsFileMenuOpen,
   setRecentVideos,
+  setCutsFromProject,
   clampControlsHeight,
   videoRef,
 }: UseProjectControllerParams) {
@@ -53,18 +57,18 @@ export function useProjectController({
   const importProject = useCallback(async () => {
     setIsFileMenuOpen(false);
 
-    const result = await window.coachEditor.loadProject();
-    if (result.canceled || !result.project) {
-      return;
-    }
-
-    const parsedProject = parseEditorProject(result.project);
-
-    setIsImporting(true);
-    setIsPlaying(false);
-    setStatusMessage("Importing project...");
-
     try {
+      const result = await window.coachEditor.loadProject();
+      if (result.canceled || !result.project) {
+        return;
+      }
+
+      const parsedProject = parseEditorProject(result.project);
+
+      setIsImporting(true);
+      setIsPlaying(false);
+      setStatusMessage("Importing project...");
+
       const loadedVideo = await window.coachEditor.openVideoFromPath(parsedProject.media.sourcePath);
       if (!loadedVideo) {
         setStatusMessage("Project loaded, but source video was not found.");
@@ -75,6 +79,7 @@ export function useProjectController({
       setDurationMs(0);
       pendingSeekMsRef.current = Math.max(0, parsedProject.timeline.currentTimeMs);
       setCurrentTimeMs(pendingSeekMsRef.current);
+      setCutsFromProject(parsedProject.timeline.cutsMs);
       setControlsHeightPx(clampControlsHeight(parsedProject.ui.controlsHeightPx));
 
       setRecentVideos((currentVideos) => {
@@ -99,6 +104,7 @@ export function useProjectController({
     setIsImporting,
     setIsPlaying,
     setRecentVideos,
+    setCutsFromProject,
     setStatusMessage,
     setVideoFile,
   ]);
@@ -116,7 +122,7 @@ export function useProjectController({
       currentTimeMs,
       durationMs,
       controlsHeightPx,
-      cutsMs: [],
+      cutsMs,
     });
 
     const result = await window.coachEditor.saveProject(
@@ -135,6 +141,7 @@ export function useProjectController({
     controlsHeightPx,
     currentTimeMs,
     durationMs,
+    cutsMs,
     setIsFileMenuOpen,
     setStatusMessage,
     videoFile,

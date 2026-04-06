@@ -4,6 +4,7 @@ import { Player } from "./components/Player";
 import { PlayerControls } from "./components/playercontrols";
 import { usePlaybackController } from "./hooks/usePlaybackController";
 import { useProjectController } from "./project/useProjectController";
+import { useTimelineCuts } from "./timeline/useTimelineCuts";
 import type { RecentVideo, VideoFile } from "./types";
 import { clampNumber, formatClockTime } from "./utils/time";
 
@@ -50,6 +51,9 @@ function App() {
     setStatusMessage,
   });
 
+  const { cutsMs, segments, canCutAt, addCutAt, setCutsFromProject, clearCuts } =
+    useTimelineCuts(durationMs);
+
   function getMaxControlsHeight() {
     const shellElement = shellRef.current;
     if (!shellElement) {
@@ -71,6 +75,7 @@ function App() {
     currentTimeMs,
     durationMs,
     controlsHeightPx,
+    cutsMs,
     setVideoFile,
     setCurrentTimeMs,
     setDurationMs,
@@ -80,6 +85,7 @@ function App() {
     setStatusMessage,
     setIsFileMenuOpen,
     setRecentVideos,
+    setCutsFromProject,
     clampControlsHeight: (heightPx) =>
       clampNumber(heightPx, MIN_CONTROLS_HEIGHT, getMaxControlsHeight()),
     videoRef,
@@ -155,6 +161,7 @@ function App() {
       }
 
       setVideoFile(selectedVideo);
+      clearCuts();
       markProjectDirty();
       setRecentVideos((currentVideos) => {
         const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
@@ -186,6 +193,7 @@ function App() {
       }
 
       setVideoFile(selectedVideo);
+      clearCuts();
       markProjectDirty();
       setRecentVideos((currentVideos) => {
         const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
@@ -236,6 +244,21 @@ function App() {
     document.body.style.userSelect = "none";
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
+  }
+
+  function cutAtPlayhead() {
+    if (!hasVideo) {
+      return;
+    }
+
+    const didCut = addCutAt(currentTimeMs);
+    if (!didCut) {
+      setStatusMessage("Cannot cut here. Move away from timeline boundaries or existing cuts.");
+      return;
+    }
+
+    markProjectDirty();
+    setStatusMessage(`Cut added at ${formatClockTime(currentTimeMs)}.`);
   }
 
   return (
@@ -306,7 +329,11 @@ function App() {
           durationMs={durationMs}
           playheadPercent={playheadPercent}
           statusMessage={statusMessage}
+          cutsMs={cutsMs}
+          segments={segments}
+          canCut={canCutAt(currentTimeMs)}
           onSkipBack={() => skipBy(-2)}
+          onCut={cutAtPlayhead}
           onTogglePlayback={togglePlayback}
           onSkipForward={() => skipBy(2)}
           onSeek={seekTo}

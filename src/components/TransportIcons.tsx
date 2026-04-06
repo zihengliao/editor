@@ -37,3 +37,56 @@ export function ForwardIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function CutIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 680 360"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <polygon points="272,163 558,155 558,160 272,178" fill="currentColor" />
+      <polygon points="272,182 558,200 558,205 272,197" fill="currentColor" />
+      <line
+        x1="160"
+        y1="150"
+        x2="282"
+        y2="170"
+        stroke="currentColor"
+        strokeWidth="13"
+        strokeLinecap="round"
+      />
+      <line
+        x1="160"
+        y1="210"
+        x2="282"
+        y2="190"
+        stroke="currentColor"
+        strokeWidth="13"
+        strokeLinecap="round"
+      />
+      <circle cx="346" cy="180" r="15" fill="currentColor" />
+      <circle cx="346" cy="180" r="6.5" fill="white" />
+      <ellipse
+        cx="160"
+        cy="110"
+        rx="53"
+        ry="41"
+        fill="white"
+        stroke="currentColor"
+        strokeWidth="11"
+      />
+      <ellipse
+        cx="160"
+        cy="250"
+        rx="53"
+        ry="41"
+        fill="white"
+        stroke="currentColor"
+        strokeWidth="11"
+      />
+    </svg>
+  );
+}
