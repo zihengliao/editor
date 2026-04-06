@@ -3,6 +3,7 @@ import { FileMenuForm } from "./components/FileMenuForm";
 import { Player } from "./components/Player";
 import { PlayerControls } from "./components/playercontrols";
 import { usePlaybackController } from "./hooks/usePlaybackController";
+import { useProjectController } from "./project/useProjectController";
 import type { RecentVideo, VideoFile } from "./types";
 import { clampNumber, formatClockTime } from "./utils/time";
 
@@ -49,6 +50,41 @@ function App() {
     setStatusMessage,
   });
 
+  function getMaxControlsHeight() {
+    const shellElement = shellRef.current;
+    if (!shellElement) {
+      return MIN_CONTROLS_HEIGHT;
+    }
+
+    const titlebarHeight = titlebarRef.current?.offsetHeight ?? 32;
+    return Math.max(MIN_CONTROLS_HEIGHT, shellElement.clientHeight - titlebarHeight - MIN_VIEWER_HEIGHT);
+  }
+
+  const {
+    isProjectDirty,
+    markProjectDirty,
+    importProject,
+    saveProject,
+    applyPendingProjectSeek,
+  } = useProjectController({
+    videoFile,
+    currentTimeMs,
+    durationMs,
+    controlsHeightPx,
+    setVideoFile,
+    setCurrentTimeMs,
+    setDurationMs,
+    setControlsHeightPx,
+    setIsPlaying,
+    setIsImporting,
+    setStatusMessage,
+    setIsFileMenuOpen,
+    setRecentVideos,
+    clampControlsHeight: (heightPx) =>
+      clampNumber(heightPx, MIN_CONTROLS_HEIGHT, getMaxControlsHeight()),
+    videoRef,
+  });
+
   useEffect(() => {
     try {
       const rawValue = window.localStorage.getItem(RECENT_VIDEOS_STORAGE_KEY);
@@ -91,10 +127,7 @@ function App() {
       }
 
       const titlebarHeight = titlebarRef.current?.offsetHeight ?? 32;
-      const maxControlsHeight = Math.max(
-        MIN_CONTROLS_HEIGHT,
-        shellElement.clientHeight - titlebarHeight - MIN_VIEWER_HEIGHT,
-      );
+      const maxControlsHeight = Math.max(MIN_CONTROLS_HEIGHT, shellElement.clientHeight - titlebarHeight - MIN_VIEWER_HEIGHT);
 
       setControlsHeightPx((currentHeight) =>
         clampNumber(currentHeight, MIN_CONTROLS_HEIGHT, maxControlsHeight),
@@ -122,6 +155,7 @@ function App() {
       }
 
       setVideoFile(selectedVideo);
+      markProjectDirty();
       setRecentVideos((currentVideos) => {
         const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
         return [{ path: selectedVideo.path, name: selectedVideo.name }, ...deduped].slice(0, 8);
@@ -152,6 +186,7 @@ function App() {
       }
 
       setVideoFile(selectedVideo);
+      markProjectDirty();
       setRecentVideos((currentVideos) => {
         const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
         return [{ path: selectedVideo.path, name: selectedVideo.name }, ...deduped].slice(0, 8);
@@ -189,6 +224,7 @@ function App() {
       // Dragging upward increases controls area; dragging downward decreases it.
       const nextHeight = startHeight + (startY - moveEvent.clientY);
       setControlsHeightPx(clampNumber(nextHeight, MIN_CONTROLS_HEIGHT, maxControlsHeight));
+      markProjectDirty();
     }
 
     function handlePointerUp() {
@@ -214,11 +250,18 @@ function App() {
         <FileMenuForm
           isOpen={isFileMenuOpen}
           recentVideos={recentVideos}
+          isProjectDirty={isProjectDirty}
           onToggle={() => setIsFileMenuOpen((currentValue) => !currentValue)}
           onClose={() => setIsFileMenuOpen(false)}
           onOpenVideo={() => {
             setIsFileMenuOpen(false);
             void openVideo();
+          }}
+          onImportProject={() => {
+            void importProject();
+          }}
+          onSaveProject={() => {
+            void saveProject();
           }}
           onOpenRecent={(videoPath) => {
             void openRecentVideo(videoPath);
@@ -233,7 +276,7 @@ function App() {
           layoutVersion={controlsHeightPx}
           onLoadedMetadata={(loadedDurationMs, videoName) => {
             setDurationMs(loadedDurationMs);
-            setCurrentTimeMs(0);
+            setCurrentTimeMs(applyPendingProjectSeek(loadedDurationMs));
             setStatusMessage(`Ready: ${videoName} (${formatClockTime(loadedDurationMs)}).`);
           }}
           onTimeUpdate={(timeMs) => {

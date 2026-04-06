@@ -4,18 +4,24 @@ import type { RecentVideo } from "../types";
 interface FileMenuFormProps {
   isOpen: boolean;
   recentVideos: RecentVideo[];
+  isProjectDirty: boolean;
   onToggle: () => void;
   onClose: () => void;
   onOpenVideo: () => void;
+  onImportProject: () => void;
+  onSaveProject: () => void;
   onOpenRecent: (path: string) => void;
 }
 
 export function FileMenuForm({
   isOpen,
   recentVideos,
+  isProjectDirty,
   onToggle,
   onClose,
   onOpenVideo,
+  onImportProject,
+  onSaveProject,
   onOpenRecent,
 }: FileMenuFormProps) {
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
@@ -57,7 +63,7 @@ export function FileMenuForm({
         aria-expanded={isOpen}
         onClick={onToggle}
       >
-        File
+        File{isProjectDirty ? " *" : ""}
       </button>
 
       {isOpen ? (
@@ -72,6 +78,24 @@ export function FileMenuForm({
             onClick={onOpenVideo}
           >
             Open Video...
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            className="block w-full px-3 py-1.5 text-left hover:bg-[#2a3240]"
+            onClick={onImportProject}
+          >
+            Import Project...
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            className="block w-full px-3 py-1.5 text-left hover:bg-[#2a3240]"
+            onClick={onSaveProject}
+          >
+            Save Project
           </button>
 
           <div className="my-1 border-t border-[#303743]" />

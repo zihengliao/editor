@@ -28,6 +28,9 @@ function formatTimelineLabel(timeMs: number): string {
 }
 
 function buildTimelineLabels(durationMs: number): TimelineLabel[] {
+  // Build evenly-spaced ruler labels across the total duration.
+  // Example with 7 labels: 0%, 16.6%, 33.3%, ... 100%.
+  // We compute each label's timestamp from ratio * duration.
   if (durationMs <= 0) {
     return [{ leftPercent: 0, timeMs: 0, label: "00:00:00" }];
   }
@@ -67,13 +70,22 @@ export function TimelineScrubber({
     }
 
     const rect = scrubberElement.getBoundingClientRect();
+    // Convert mouse X position into a 0..1 ratio inside the scrubber:
+    //  - offsetX is local position from the left edge
+    //  - clamped to avoid negative or overrun values
+    //  - ratio = offsetX / totalWidth
     const offsetX = Math.min(Math.max(clientX - rect.left, 0), rect.width);
     const ratio = rect.width === 0 ? 0 : offsetX / rect.width;
+
+    // Map that ratio to an absolute timeline time in milliseconds.
     onSeek(Math.floor(durationMs * ratio));
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault();
+
+    // Seek once immediately where the user pressed,
+    // then keep seeking while dragging (pointermove).
     seekFromPointer(event.clientX);
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
