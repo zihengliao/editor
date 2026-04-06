@@ -43,6 +43,7 @@ function App() {
   const [controlsHeightPx, setControlsHeightPx] = useState(getInitialControlsHeight);
   const [recentVideos, setRecentVideos] = useState<RecentVideo[]>([]);
   const [shouldResetTimelineOnMetadata, setShouldResetTimelineOnMetadata] = useState(false);
+  const [pendingTimelineSyncEditedMs, setPendingTimelineSyncEditedMs] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState(
     "Open a local game file to preview footage.",
   );
@@ -59,6 +60,10 @@ function App() {
     canCutAt,
     addCutAt,
     deleteSegmentById,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     setCutsFromProject,
     setRangesFromProject,
     resetToFullDuration,
@@ -372,15 +377,60 @@ function App() {
     markProjectDirty,
   ]);
 
+  const undoTimelineChange = useCallback(() => {
+    const didUndo = undo();
+    if (!didUndo) {
+      return;
+    }
+
+    clearSelectedSegment();
+    markProjectDirty();
+    setPendingTimelineSyncEditedMs(currentEditedTimeMs);
+    setStatusMessage("Undo timeline change.");
+  }, [undo, clearSelectedSegment, markProjectDirty, currentEditedTimeMs]);
+
+  const redoTimelineChange = useCallback(() => {
+    const didRedo = redo();
+    if (!didRedo) {
+      return;
+    }
+
+    clearSelectedSegment();
+    markProjectDirty();
+    setPendingTimelineSyncEditedMs(currentEditedTimeMs);
+    setStatusMessage("Redo timeline change.");
+  }, [redo, clearSelectedSegment, markProjectDirty, currentEditedTimeMs]);
+
   useEffect(() => {
-    function handleDeleteShortcut(event: KeyboardEvent) {
+    function handleEditorShortcuts(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       const isTypingIntoField =
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
         target?.isContentEditable;
 
-      if (isTypingIntoField || !selectedSegmentId) {
+      if (isTypingIntoField) {
+        return;
+      }
+
+      const isUndo = (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z";
+      const isRedoPrimary =
+        (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "z";
+      const isRedoSecondary = event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === "y";
+
+      if (isUndo) {
+        event.preventDefault();
+        undoTimelineChange();
+        return;
+      }
+
+      if (isRedoPrimary || isRedoSecondary) {
+        event.preventDefault();
+        redoTimelineChange();
+        return;
+      }
+
+      if (!selectedSegmentId) {
         return;
       }
 
@@ -392,9 +442,32 @@ function App() {
       deleteSelectedSegment();
     }
 
-    window.addEventListener("keydown", handleDeleteShortcut);
-    return () => window.removeEventListener("keydown", handleDeleteShortcut);
-  }, [selectedSegmentId, deleteSelectedSegment]);
+    window.addEventListener("keydown", handleEditorShortcuts);
+    return () => window.removeEventListener("keydown", handleEditorShortcuts);
+  }, [selectedSegmentId, deleteSelectedSegment, undoTimelineChange, redoTimelineChange]);
+
+  useEffect(() => {
+    if (pendingTimelineSyncEditedMs === null) {
+      return;
+    }
+
+    if (!hasRetainedSegments) {
+      videoRef.current?.pause();
+      setIsPlaying(false);
+      setCurrentTimeMs(0);
+      setPendingTimelineSyncEditedMs(null);
+      return;
+    }
+
+    const sourceTimeMs = editedMsToSourceMs(pendingTimelineSyncEditedMs);
+    const videoElement = videoRef.current;
+    if (videoElement) {
+      videoElement.currentTime = sourceTimeMs / 1000;
+    }
+
+    setCurrentTimeMs(sourceTimeMs);
+    setPendingTimelineSyncEditedMs(null);
+  }, [pendingTimelineSyncEditedMs, editedMsToSourceMs, hasRetainedSegments]);
 
   return (
     <div
@@ -496,7 +569,11 @@ function App() {
           selectedSegmentId={selectedSegmentId}
           canCut={hasRetainedSegments && canCutAt(currentTimeMs)}
           canDeleteSelected={selectedSegmentId !== null}
+          canUndo={canUndo}
+          canRedo={canRedo}
           isTransportDisabled={!hasRetainedSegments}
+          onUndo={undoTimelineChange}
+          onRedo={redoTimelineChange}
           onSkipBack={() => skipBy(-2)}
           onCut={cutAtPlayhead}
           onDeleteSelected={deleteSelectedSegment}

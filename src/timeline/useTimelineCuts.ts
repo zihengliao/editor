@@ -1,239 +1,99 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { clampNumber } from "../utils/time";
-import type { TimelineRange, TimelineSegment } from "./types";
+import { useCallback, useMemo, useRef } from "react";
+import type { TimelineRange } from "./types";
+import { CUT_EPSILON_MS } from "./model/constants";
+import { buildRangeId } from "./model/ids";
+import { alignSourceTimeToRetainedRange, editedMsToSourceMs, sourceMsToEditedMs } from "./model/mapping";
+import { buildRangesFromCuts, normalizeRanges } from "./model/ranges";
+import { buildCutsFromSegments, buildSegments, getEditedDurationMs } from "./model/segments";
+import { useRangeHistory } from "./history/useRangeHistory";
 
-const CUT_EPSILON_MS = 120;
-
-function buildRangeId(index: number): string {
-  return `range-${index}`;
-}
-
-function normalizeRanges(ranges: TimelineRange[], durationMs: number): TimelineRange[] {
+function normalizeForCurrentDuration(ranges: TimelineRange[], durationMs: number): TimelineRange[] {
   if (durationMs <= 0) {
     return [];
   }
 
-  const sortedRanges = [...ranges]
-    .filter((range) => Number.isFinite(range.startMs) && Number.isFinite(range.endMs))
-    .map((range) => ({
-      ...range,
-      startMs: Math.floor(clampNumber(range.startMs, 0, durationMs)),
-      endMs: Math.floor(clampNumber(range.endMs, 0, durationMs)),
-    }))
-    .sort((left, right) => left.startMs - right.startMs);
-
-  const normalized: TimelineRange[] = [];
-
-  for (let index = 0; index < sortedRanges.length; index += 1) {
-    const range = sortedRanges[index];
-    const previous = normalized[normalized.length - 1];
-    const startMs = previous ? Math.max(range.startMs, previous.endMs) : range.startMs;
-    const endMs = Math.max(startMs, range.endMs);
-
-    if (endMs - startMs <= 0) {
-      continue;
-    }
-
-    normalized.push({
-      id: range.id,
-      startMs,
-      endMs,
-    });
-  }
-
-  return normalized;
-}
-
-function buildRangesFromCuts(cutsMs: number[], durationMs: number): TimelineRange[] {
-  if (durationMs <= 0) {
-    return [];
-  }
-
-  const uniqueSortedCuts = [...cutsMs]
-    .filter((cut) => Number.isFinite(cut))
-    .map((cut) => Math.floor(cut))
-    .sort((a, b) => a - b)
-    .filter((cut, index, allCuts) => index === 0 || cut !== allCuts[index - 1])
-    .filter((cut) => cut > CUT_EPSILON_MS && cut < durationMs - CUT_EPSILON_MS);
-
-  const boundaries = [0, ...uniqueSortedCuts, durationMs];
-  const ranges: TimelineRange[] = [];
-
-  for (let index = 0; index < boundaries.length - 1; index += 1) {
-    const startMs = boundaries[index];
-    const endMs = boundaries[index + 1];
-    if (endMs - startMs <= 0) {
-      continue;
-    }
-
-    ranges.push({
-      id: buildRangeId(index),
-      startMs,
-      endMs,
-    });
-  }
-
-  return ranges;
-}
-
-function buildSegments(ranges: TimelineRange[]): TimelineSegment[] {
-  let editedCursorMs = 0;
-
-  return ranges.map((range) => {
-    const durationMs = Math.max(0, range.endMs - range.startMs);
-    const segment: TimelineSegment = {
-      id: range.id,
-      startMs: editedCursorMs,
-      endMs: editedCursorMs + durationMs,
-      durationMs,
-      sourceStartMs: range.startMs,
-      sourceEndMs: range.endMs,
-    };
-
-    editedCursorMs += durationMs;
-    return segment;
-  });
+  return normalizeRanges(ranges, durationMs);
 }
 
 export function useTimelineCuts(durationMs: number) {
   const rangeIdRef = useRef(0);
-  const [ranges, setRanges] = useState<TimelineRange[]>([]);
+  const {
+    ranges,
+    commit,
+    reset,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = useRangeHistory([]);
+
+  const normalizedRanges = useMemo(
+    () => normalizeForCurrentDuration(ranges, durationMs),
+    [ranges, durationMs],
+  );
+  const segments = useMemo(() => buildSegments(normalizedRanges), [normalizedRanges]);
+  const editedDurationMs = useMemo(() => getEditedDurationMs(segments), [segments]);
+  const cutsMs = useMemo(() => buildCutsFromSegments(segments), [segments]);
+
+  const sourceMsToEdited = useCallback(
+    (sourceTimeMs: number) => sourceMsToEditedMs(sourceTimeMs, normalizedRanges, editedDurationMs),
+    [normalizedRanges, editedDurationMs],
+  );
+
+  const editedToSourceMs = useCallback(
+    (editedTimeMs: number) => editedMsToSourceMs(editedTimeMs, normalizedRanges, editedDurationMs),
+    [normalizedRanges, editedDurationMs],
+  );
+
+  const alignSourceTime = useCallback(
+    (sourceTimeMs: number) => alignSourceTimeToRetainedRange(sourceTimeMs, normalizedRanges, durationMs),
+    [normalizedRanges, durationMs],
+  );
 
   const nextRangeId = useCallback(() => {
     rangeIdRef.current += 1;
     return buildRangeId(rangeIdRef.current);
   }, []);
 
-  const normalizedRanges = useMemo(
-    () => normalizeRanges(ranges, durationMs),
-    [ranges, durationMs],
-  );
-  const segments = useMemo(() => buildSegments(normalizedRanges), [normalizedRanges]);
-  const editedDurationMs = useMemo(
-    () => segments.reduce((total, segment) => total + segment.durationMs, 0),
-    [segments],
-  );
-  const cutsMs = useMemo(
-    () => segments.slice(0, -1).map((segment) => segment.endMs),
-    [segments],
-  );
+  const resetRangeIdCounter = useCallback((nextRanges: TimelineRange[]) => {
+    rangeIdRef.current = nextRanges.length;
+  }, []);
 
-  const sourceMsToEditedMs = useCallback(
-    (sourceTimeMs: number) => {
-      if (normalizedRanges.length === 0) {
-        return 0;
+  const canCutAt = useCallback(
+    (sourceTimeMs: number): boolean => {
+      if (durationMs <= 0 || normalizedRanges.length === 0) {
+        return false;
       }
 
       const safeSourceTime = Math.floor(sourceTimeMs);
-      let editedCursor = 0;
+      const containingRange = normalizedRanges.find(
+        (range) => safeSourceTime > range.startMs && safeSourceTime < range.endMs,
+      );
 
-      for (let index = 0; index < normalizedRanges.length; index += 1) {
-        const range = normalizedRanges[index];
-        const rangeDuration = range.endMs - range.startMs;
-
-        if (safeSourceTime < range.startMs) {
-          return editedCursor;
-        }
-
-        if (safeSourceTime <= range.endMs) {
-          return editedCursor + (safeSourceTime - range.startMs);
-        }
-
-        editedCursor += rangeDuration;
+      if (!containingRange) {
+        return false;
       }
 
-      return editedDurationMs;
-    },
-    [editedDurationMs, normalizedRanges],
-  );
+      const distanceFromStart = safeSourceTime - containingRange.startMs;
+      const distanceFromEnd = containingRange.endMs - safeSourceTime;
 
-  const editedMsToSourceMs = useCallback(
-    (editedTimeMs: number) => {
-      if (normalizedRanges.length === 0) {
-        return 0;
-      }
-
-      const safeEditedMs = Math.floor(clampNumber(editedTimeMs, 0, Math.max(editedDurationMs, 0)));
-      let editedCursor = 0;
-
-      for (let index = 0; index < normalizedRanges.length; index += 1) {
-        const range = normalizedRanges[index];
-        const rangeDuration = range.endMs - range.startMs;
-        const nextEditedCursor = editedCursor + rangeDuration;
-
-        if (safeEditedMs <= nextEditedCursor) {
-          return range.startMs + (safeEditedMs - editedCursor);
-        }
-
-        editedCursor = nextEditedCursor;
-      }
-
-      const lastRange = normalizedRanges[normalizedRanges.length - 1];
-      return lastRange.endMs;
-    },
-    [editedDurationMs, normalizedRanges],
-  );
-
-  const alignSourceTimeToRetainedRange = useCallback(
-    (sourceTimeMs: number) => {
-      if (normalizedRanges.length === 0) {
-        return null;
-      }
-
-      const safeSourceTime = Math.floor(clampNumber(sourceTimeMs, 0, durationMs));
-
-      for (let index = 0; index < normalizedRanges.length; index += 1) {
-        const range = normalizedRanges[index];
-
-        if (safeSourceTime >= range.startMs && safeSourceTime <= range.endMs) {
-          return safeSourceTime;
-        }
-
-        if (safeSourceTime < range.startMs) {
-          return range.startMs;
-        }
-      }
-
-      return null;
+      return distanceFromStart > CUT_EPSILON_MS && distanceFromEnd > CUT_EPSILON_MS;
     },
     [durationMs, normalizedRanges],
   );
 
-  function canCutAt(sourceTimeMs: number): boolean {
-    if (durationMs <= 0 || normalizedRanges.length === 0) {
-      return false;
-    }
+  const addCutAt = useCallback(
+    (sourceTimeMs: number): boolean => {
+      const safeSourceTime = Math.floor(sourceTimeMs);
+      if (!canCutAt(safeSourceTime)) {
+        return false;
+      }
 
-    const safeSourceTime = Math.floor(sourceTimeMs);
-    const containingRange = normalizedRanges.find(
-      (range) => safeSourceTime > range.startMs && safeSourceTime < range.endMs,
-    );
-
-    if (!containingRange) {
-      return false;
-    }
-
-    const distanceFromStart = safeSourceTime - containingRange.startMs;
-    const distanceFromEnd = containingRange.endMs - safeSourceTime;
-
-    if (distanceFromStart <= CUT_EPSILON_MS || distanceFromEnd <= CUT_EPSILON_MS) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function addCutAt(sourceTimeMs: number): boolean {
-    const safeSourceTime = Math.floor(sourceTimeMs);
-    if (!canCutAt(safeSourceTime)) {
-      return false;
-    }
-
-    setRanges((currentRanges) => {
       const nextRanges: TimelineRange[] = [];
 
-      for (let index = 0; index < currentRanges.length; index += 1) {
-        const range = currentRanges[index];
+      for (let index = 0; index < ranges.length; index += 1) {
+        const range = ranges[index];
+
         if (safeSourceTime <= range.startMs || safeSourceTime >= range.endMs) {
           nextRanges.push(range);
           continue;
@@ -245,80 +105,88 @@ export function useTimelineCuts(durationMs: number) {
         );
       }
 
-      return normalizeRanges(nextRanges, durationMs);
-    });
+      commit(normalizeForCurrentDuration(nextRanges, durationMs));
+      return true;
+    },
+    [canCutAt, ranges, nextRangeId, commit, durationMs],
+  );
 
-    return true;
-  }
+  const deleteSegmentById = useCallback(
+    (segmentId: string): boolean => {
+      if (!ranges.some((range) => range.id === segmentId)) {
+        return false;
+      }
 
-  function deleteSegmentById(segmentId: string): boolean {
-    if (!normalizedRanges.some((range) => range.id === segmentId)) {
-      return false;
-    }
+      commit(ranges.filter((range) => range.id !== segmentId));
+      return true;
+    },
+    [ranges, commit],
+  );
 
-    setRanges((currentRanges) => currentRanges.filter((range) => range.id !== segmentId));
-    return true;
-  }
+  const setCutsFromProject = useCallback(
+    (projectCutsMs: number[], sourceDurationMs?: number) => {
+      const effectiveDurationMs =
+        sourceDurationMs && Number.isFinite(sourceDurationMs) && sourceDurationMs > 0
+          ? Math.floor(sourceDurationMs)
+          : durationMs > 0
+            ? durationMs
+            : Number.MAX_SAFE_INTEGER;
 
-  function setCutsFromProject(projectCutsMs: number[], sourceDurationMs?: number) {
-    const effectiveDurationMs =
-      sourceDurationMs && Number.isFinite(sourceDurationMs) && sourceDurationMs > 0
-        ? Math.floor(sourceDurationMs)
-        : durationMs > 0
-          ? durationMs
-          : Number.MAX_SAFE_INTEGER;
+      const projectRanges = buildRangesFromCuts(projectCutsMs, effectiveDurationMs);
+      resetRangeIdCounter(projectRanges);
+      reset(projectRanges);
+    },
+    [durationMs, resetRangeIdCounter, reset],
+  );
 
-    const projectRanges = buildRangesFromCuts(projectCutsMs, effectiveDurationMs);
-    rangeIdRef.current = projectRanges.length;
-    setRanges(projectRanges);
-  }
+  const setRangesFromProject = useCallback(
+    (projectRanges: Array<{ startMs: number; endMs: number }>) => {
+      const nextRanges = normalizeRanges(
+        projectRanges.map((range, index) => ({
+          id: buildRangeId(index),
+          startMs: range.startMs,
+          endMs: range.endMs,
+        })),
+        Number.MAX_SAFE_INTEGER,
+      );
 
-  function setRangesFromProject(projectRanges: Array<{ startMs: number; endMs: number }>) {
-    const nextRanges = normalizeRanges(
-      projectRanges.map((range, index) => ({
-        id: buildRangeId(index),
-        startMs: range.startMs,
-        endMs: range.endMs,
-      })),
-      Number.MAX_SAFE_INTEGER,
-    );
+      resetRangeIdCounter(nextRanges);
+      reset(nextRanges);
+    },
+    [resetRangeIdCounter, reset],
+  );
 
-    rangeIdRef.current = nextRanges.length;
-    setRanges(nextRanges);
-  }
+  const resetToFullDuration = useCallback(
+    (nextDurationMs?: number) => {
+      const targetDurationMs = Math.floor(
+        Number.isFinite(nextDurationMs) ? (nextDurationMs as number) : durationMs,
+      );
 
-  function resetToFullDuration(nextDurationMs?: number) {
-    const targetDurationMs = Math.floor(
-      Number.isFinite(nextDurationMs) ? (nextDurationMs as number) : durationMs,
-    );
+      if (targetDurationMs <= 0) {
+        reset([]);
+        return;
+      }
 
-    if (targetDurationMs <= 0) {
-      setRanges([]);
-      return;
-    }
+      const nextRanges = [{ id: buildRangeId(0), startMs: 0, endMs: targetDurationMs }];
+      rangeIdRef.current = 1;
+      reset(nextRanges);
+    },
+    [durationMs, reset],
+  );
 
+  const clearCuts = useCallback(() => {
     rangeIdRef.current = 0;
-    setRanges([
-      {
-        id: buildRangeId(0),
-        startMs: 0,
-        endMs: targetDurationMs,
-      },
-    ]);
-  }
-
-  function clearCuts() {
-    setRanges([]);
-  }
+    reset([]);
+  }, [reset]);
 
   return {
     ranges: normalizedRanges,
     cutsMs,
     segments,
     editedDurationMs,
-    sourceMsToEditedMs,
-    editedMsToSourceMs,
-    alignSourceTimeToRetainedRange,
+    sourceMsToEditedMs: sourceMsToEdited,
+    editedMsToSourceMs: editedToSourceMs,
+    alignSourceTimeToRetainedRange: alignSourceTime,
     canCutAt,
     addCutAt,
     deleteSegmentById,
@@ -326,5 +194,9 @@ export function useTimelineCuts(durationMs: number) {
     setRangesFromProject,
     resetToFullDuration,
     clearCuts,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   };
 }

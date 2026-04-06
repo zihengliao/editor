@@ -1,4 +1,13 @@
-import { BackIcon, CutIcon, DeleteIcon, ForwardIcon, PauseIcon, PlayIcon } from "./TransportIcons";
+import {
+  BackIcon,
+  CutIcon,
+  DeleteIcon,
+  ForwardIcon,
+  PauseIcon,
+  PlayIcon,
+  RedoIcon,
+  UndoIcon,
+} from "./TransportIcons";
 import { TimelineScrubber } from "./timeline/TimelineScrubber";
 import { formatClockTime } from "../utils/time";
 import type { TimelineSegment } from "../timeline/types";
@@ -16,7 +25,11 @@ interface PlayerControlsProps {
   selectedSegmentId: string | null;
   canCut: boolean;
   canDeleteSelected: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   isTransportDisabled: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   onSkipBack: () => void;
   onCut: () => void;
   onDeleteSelected: () => void;
@@ -39,7 +52,11 @@ export function PlayerControls({
   selectedSegmentId,
   canCut,
   canDeleteSelected,
+  canUndo,
+  canRedo,
   isTransportDisabled,
+  onUndo,
+  onRedo,
   onSkipBack,
   onCut,
   onDeleteSelected,
@@ -54,6 +71,26 @@ export function PlayerControls({
         <div className="min-w-0" aria-hidden="true" />
 
         <div className="flex items-center justify-center gap-2.5" aria-label="Playback controls">
+          <button
+            type="button"
+            className="grid h-10 w-11 place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"
+            onClick={onUndo}
+            disabled={!canUndo || isImporting}
+            aria-label="Undo"
+          >
+            <UndoIcon />
+          </button>
+
+          <button
+            type="button"
+            className="grid h-10 w-11 place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"
+            onClick={onRedo}
+            disabled={!canRedo || isImporting}
+            aria-label="Redo"
+          >
+            <RedoIcon />
+          </button>
+
           <button
             type="button"
             className="grid h-10 w-11 place-items-center rounded-lg border border-[#3a4352] bg-[#242a33] text-white transition enabled:hover:bg-[#2f3744] disabled:cursor-not-allowed disabled:opacity-45"

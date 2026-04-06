@@ -101,3 +101,25 @@ export function DeleteIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function UndoIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false">
+      <path
+        d="M12 5C15.8 5 19 7.5 19.8 11H17.7C17 8.7 14.7 7 12 7C9.5 7 7.3 8.4 6.2 10.5L9 13.2H3.5V7.7L4.8 9C6.2 6.6 8.9 5 12 5Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function RedoIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false">
+      <path
+        d="M12 5C15.1 5 17.8 6.6 19.2 9L20.5 7.7V13.2H15L17.8 10.5C16.7 8.4 14.5 7 12 7C9.3 7 7 8.7 6.3 11H4.2C5 7.5 8.2 5 12 5Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
