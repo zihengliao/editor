@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface TimelineScrubberProps {
   hasVideo: boolean;
@@ -15,6 +15,9 @@ interface TimelineLabel {
   label: string;
 }
 
+const MAJOR_TICK_PX = 120;
+const MINOR_TICK_PX = 12;
+
 function formatTimelineLabel(timeMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(timeMs / 1000));
   const hours = Math.floor(totalSeconds / 3600)
@@ -27,20 +30,21 @@ function formatTimelineLabel(timeMs: number): string {
   return `${hours}:${minutes}:${seconds}`;
 }
 
-function buildTimelineLabels(durationMs: number): TimelineLabel[] {
-  // Build evenly-spaced ruler labels across the total duration.
-  // Example with 7 labels: 0%, 16.6%, 33.3%, ... 100%.
-  // We compute each label's timestamp from ratio * duration.
-  if (durationMs <= 0) {
+function buildMajorTickLabels(durationMs: number, rulerWidthPx: number): TimelineLabel[] {
+  // Timestamps are generated from physical major-tick spacing (120px).
+  // This keeps labels perfectly synced with ruler marks and video duration.
+  if (durationMs <= 0 || rulerWidthPx <= 0) {
     return [{ leftPercent: 0, timeMs: 0, label: "00:00:00" }];
   }
 
-  const desiredLabelCount = 7;
+  const majorTickCount = Math.floor(rulerWidthPx / MAJOR_TICK_PX);
   const labels: TimelineLabel[] = [];
 
-  for (let index = 0; index < desiredLabelCount; index += 1) {
-    const ratio = index / (desiredLabelCount - 1);
+  for (let index = 0; index <= majorTickCount; index += 1) {
+    const xPx = index * MAJOR_TICK_PX;
+    const ratio = xPx / rulerWidthPx;
     const timeMs = Math.floor(durationMs * ratio);
+
     labels.push({
       leftPercent: ratio * 100,
       timeMs,
@@ -60,8 +64,30 @@ export function TimelineScrubber({
   onSeek,
 }: TimelineScrubberProps) {
   const scrubberRef = useRef<HTMLDivElement | null>(null);
+  const [rulerWidthPx, setRulerWidthPx] = useState(0);
 
-  const labels = useMemo(() => buildTimelineLabels(durationMs), [durationMs]);
+  useEffect(() => {
+    const scrubberElement = scrubberRef.current;
+    if (!scrubberElement) {
+      return;
+    }
+
+    const updateWidth = () => {
+      setRulerWidthPx(Math.floor(scrubberElement.clientWidth));
+    };
+
+    updateWidth();
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(scrubberElement);
+
+    return () => observer.disconnect();
+  }, []);
+
+  const labels = useMemo(
+    () => buildMajorTickLabels(durationMs, rulerWidthPx),
+    [durationMs, rulerWidthPx],
+  );
 
   function seekFromPointer(clientX: number) {
     const scrubberElement = scrubberRef.current;
@@ -70,22 +96,13 @@ export function TimelineScrubber({
     }
 
     const rect = scrubberElement.getBoundingClientRect();
-    // Convert mouse X position into a 0..1 ratio inside the scrubber:
-    //  - offsetX is local position from the left edge
-    //  - clamped to avoid negative or overrun values
-    //  - ratio = offsetX / totalWidth
     const offsetX = Math.min(Math.max(clientX - rect.left, 0), rect.width);
     const ratio = rect.width === 0 ? 0 : offsetX / rect.width;
-
-    // Map that ratio to an absolute timeline time in milliseconds.
     onSeek(Math.floor(durationMs * ratio));
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault();
-
-    // Seek once immediately where the user pressed,
-    // then keep seeking while dragging (pointermove).
     seekFromPointer(event.clientX);
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
@@ -115,11 +132,17 @@ export function TimelineScrubber({
     >
       <div className="relative h-8 border-b border-[#262d3a] bg-[#1b2028]">
         <div
+          className="absolute inset-x-0 top-0 h-2"
+          style={{
+            backgroundImage: `repeating-linear-gradient(to right, rgba(102,112,130,0.38) 0px, rgba(102,112,130,0.38) 1px, transparent 1px, transparent ${MINOR_TICK_PX}px)`,
+          }}
+          aria-hidden="true"
+        />
+
+        <div
           className="absolute inset-x-0 top-0 h-5"
           style={{
-            backgroundImage:
-              // Minor ruler marks are intentionally short to match timeline editors.
-              "repeating-linear-gradient(to right, rgba(102,112,130,0.38) 0px, rgba(102,112,130,0.38) 1px, transparent 1px, transparent 8px), repeating-linear-gradient(to right, rgba(132,144,162,0.52) 0px, rgba(132,144,162,0.52) 1px, transparent 1px, transparent 40px)",
+            backgroundImage: `repeating-linear-gradient(to right, rgba(132,144,162,0.62) 0px, rgba(132,144,162,0.62) 1px, transparent 1px, transparent ${MAJOR_TICK_PX}px)`,
           }}
           aria-hidden="true"
         />
@@ -128,14 +151,14 @@ export function TimelineScrubber({
           <span
             key={timelineLabel.timeMs}
             className="absolute top-1 text-[10px] text-[#8b95a6]"
-            style={{ left: `${timelineLabel.leftPercent}%`, transform: "translateX(-50%)" }}
+            style={{ left: `${timelineLabel.leftPercent}%`, transform: "translateX(4px)" }}
           >
             {timelineLabel.label}
           </span>
         ))}
       </div>
 
-      <div className="relative h-10 bg-[#1b2028] px-2 py-2">
+      <div className="relative h-10 bg-[#1b2028] py-2">
         {hasVideo ? (
           <div
             className="h-full w-full border border-[#2a5b86] bg-gradient-to-r from-[#3d78aa] to-[#3f79ab]"
