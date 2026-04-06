@@ -5,6 +5,7 @@ import { PlayerControls } from "./components/playercontrols";
 import { usePlaybackController } from "./hooks/usePlaybackController";
 import { useProjectController } from "./project/useProjectController";
 import { useTimelineCuts } from "./timeline/useTimelineCuts";
+import { useTimelineSelection } from "./timeline/useTimelineSelection";
 import type { RecentVideo, VideoFile } from "./types";
 import { clampNumber, formatClockTime } from "./utils/time";
 
@@ -53,6 +54,7 @@ function App() {
 
   const { cutsMs, segments, canCutAt, addCutAt, setCutsFromProject, clearCuts } =
     useTimelineCuts(durationMs);
+  const { selectedSegmentId, selectSegment, clearSelectedSegment } = useTimelineSelection(segments);
 
   function getMaxControlsHeight() {
     const shellElement = shellRef.current;
@@ -162,6 +164,7 @@ function App() {
 
       setVideoFile(selectedVideo);
       clearCuts();
+      clearSelectedSegment();
       markProjectDirty();
       setRecentVideos((currentVideos) => {
         const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
@@ -194,6 +197,7 @@ function App() {
 
       setVideoFile(selectedVideo);
       clearCuts();
+      clearSelectedSegment();
       markProjectDirty();
       setRecentVideos((currentVideos) => {
         const deduped = currentVideos.filter((entry) => entry.path !== selectedVideo.path);
@@ -281,6 +285,7 @@ function App() {
             void openVideo();
           }}
           onImportProject={() => {
+            clearSelectedSegment();
             void importProject();
           }}
           onSaveProject={() => {
@@ -331,12 +336,14 @@ function App() {
           statusMessage={statusMessage}
           cutsMs={cutsMs}
           segments={segments}
+          selectedSegmentId={selectedSegmentId}
           canCut={canCutAt(currentTimeMs)}
           onSkipBack={() => skipBy(-2)}
           onCut={cutAtPlayhead}
           onTogglePlayback={togglePlayback}
           onSkipForward={() => skipBy(2)}
           onSeek={seekTo}
+          onSelectSegment={selectSegment}
         />
       </div>
     </div>

@@ -13,12 +13,14 @@ interface PlayerControlsProps {
   statusMessage: string;
   cutsMs: number[];
   segments: TimelineSegment[];
+  selectedSegmentId: string | null;
   canCut: boolean;
   onSkipBack: () => void;
   onCut: () => void;
   onTogglePlayback: () => void;
   onSkipForward: () => void;
   onSeek: (timeMs: number) => void;
+  onSelectSegment: (segmentId: string) => void;
 }
 
 export function PlayerControls({
@@ -31,12 +33,14 @@ export function PlayerControls({
   statusMessage,
   cutsMs,
   segments,
+  selectedSegmentId,
   canCut,
   onSkipBack,
   onCut,
   onTogglePlayback,
   onSkipForward,
   onSeek,
+  onSelectSegment,
 }: PlayerControlsProps) {
   return (
     <footer className="grid h-full content-start gap-2.5 border-t border-[#303743] bg-gradient-to-b from-[#20252d] to-[#191e26] px-4 py-3">
@@ -97,11 +101,13 @@ export function PlayerControls({
         hasVideo={hasVideo}
         cutsMs={cutsMs}
         segments={segments}
+        selectedSegmentId={selectedSegmentId}
         currentTimeMs={currentTimeMs}
         durationMs={durationMs}
         playheadPercent={playheadPercent}
         isDisabled={!hasVideo || isImporting}
         onSeek={onSeek}
+        onSelectSegment={onSelectSegment}
       />
 
       <p className="text-xs text-[#9aa4b3]">{statusMessage}</p>

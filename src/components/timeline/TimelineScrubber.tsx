@@ -5,11 +5,13 @@ interface TimelineScrubberProps {
   hasVideo: boolean;
   cutsMs: number[];
   segments: TimelineSegment[];
+  selectedSegmentId: string | null;
   currentTimeMs: number;
   durationMs: number;
   playheadPercent: number;
   isDisabled: boolean;
   onSeek: (timeMs: number) => void;
+  onSelectSegment: (segmentId: string) => void;
 }
 
 interface TimelineLabel {
@@ -62,11 +64,13 @@ export function TimelineScrubber({
   hasVideo,
   cutsMs,
   segments,
+  selectedSegmentId,
   currentTimeMs,
   durationMs,
   playheadPercent,
   isDisabled,
   onSeek,
+  onSelectSegment,
 }: TimelineScrubberProps) {
   const scrubberRef = useRef<HTMLDivElement | null>(null);
   const [rulerWidthPx, setRulerWidthPx] = useState(0);
@@ -127,15 +131,17 @@ export function TimelineScrubber({
     <div
       ref={scrubberRef}
       className="relative overflow-hidden border border-[#2b3240] bg-[#141820]"
-      onPointerDown={handlePointerDown}
-      role="slider"
-      aria-label="Playback timeline"
-      aria-valuemin={0}
-      aria-valuemax={Math.max(durationMs, 1)}
-      aria-valuenow={Math.min(currentTimeMs, Math.max(durationMs, 1))}
-      aria-disabled={isDisabled}
     >
-      <div className="relative h-8 border-b border-[#262d3a] bg-[#1b2028]">
+      <div
+        className="relative h-8 border-b border-[#262d3a] bg-[#1b2028]"
+        onPointerDown={handlePointerDown}
+        role="slider"
+        aria-label="Playback timeline"
+        aria-valuemin={0}
+        aria-valuemax={Math.max(durationMs, 1)}
+        aria-valuenow={Math.min(currentTimeMs, Math.max(durationMs, 1))}
+        aria-disabled={isDisabled}
+      >
         <div
           className="absolute inset-x-0 top-0 h-2"
           style={{
@@ -165,8 +171,37 @@ export function TimelineScrubber({
 
       <div className="relative h-10 bg-[#1b2028] py-2">
         {hasVideo ? (
-          <div className="relative h-full w-full" aria-hidden="true">
+          <div className="relative h-full w-full">
             <div className="h-full w-full border border-[#2a5b86] bg-gradient-to-r from-[#3d78aa] to-[#3f79ab]" />
+
+            {/*
+              Segment hitboxes sit on top of the blue strip so each timeline block
+              is individually clickable/selectable. Width/position come from the
+              real segment time ranges, so selection remains time-accurate.
+            */}
+            {segments.map((segment) => {
+              const leftPercent = durationMs > 0 ? (segment.startMs / durationMs) * 100 : 0;
+              const widthPercent = durationMs > 0 ? (segment.durationMs / durationMs) * 100 : 0;
+              const isSelected = selectedSegmentId === segment.id;
+
+              return (
+                <button
+                  key={segment.id}
+                  type="button"
+                  className={
+                    isSelected
+                      ? "absolute inset-y-0 z-20 bg-transparent border border-[#ef4444]"
+                      : "absolute inset-y-0 z-20 bg-transparent border border-transparent"
+                  }
+                  style={{
+                    left: `${leftPercent}%`,
+                    width: `${widthPercent}%`,
+                  }}
+                  aria-label={`Select segment ${formatTimelineLabel(segment.startMs)} to ${formatTimelineLabel(segment.endMs)}`}
+                  onClick={() => onSelectSegment(segment.id)}
+                />
+              );
+            })}
 
             {/* Draw cut separators as an overlay so boundaries align exactly to time position. */}
             {cutsMs.map((cutMs) => {
@@ -174,20 +209,12 @@ export function TimelineScrubber({
               return (
                 <span
                   key={`cut-${cutMs}`}
-                  className="pointer-events-none absolute inset-y-0 w-px bg-[#1b2028]"
+                  className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[#1b2028]"
                   style={{ left: `${cutLeftPercent}%` }}
                 />
               );
             })}
 
-            {/* Keep segments in DOM for upcoming selection/edit interactions. */}
-            <div className="sr-only">
-            {segments.map((segment) => (
-              <span key={segment.id}>
-                {segment.startMs}-{segment.endMs}
-              </span>
-            ))}
-            </div>
           </div>
         ) : null}
       </div>

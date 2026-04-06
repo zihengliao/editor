@@ -4,6 +4,8 @@ import type { TimelineSegment } from "./types";
 const CUT_EPSILON_MS = 120;
 
 function normalizeCuts(cutsMs: number[], durationMs: number): number[] {
+  // Keep cut points deterministic for rendering and project save/load:
+  // 1) numeric only, 2) integer ms, 3) sorted, 4) unique.
   const uniqueSorted = [...cutsMs]
     .filter((cut) => Number.isFinite(cut))
     .map((cut) => Math.floor(cut))
@@ -14,6 +16,7 @@ function normalizeCuts(cutsMs: number[], durationMs: number): number[] {
     return [];
   }
 
+  // Prevent cuts too close to timeline boundaries to avoid tiny invalid segments.
   return uniqueSorted.filter((cut) => cut > CUT_EPSILON_MS && cut < durationMs - CUT_EPSILON_MS);
 }
 
@@ -22,6 +25,8 @@ function buildSegments(cutsMs: number[], durationMs: number): TimelineSegment[] 
     return [];
   }
 
+  // Segments are derived from cut boundaries, not edited destructively.
+  // Example: cuts [10s, 25s] -> boundaries [0,10,25,end].
   const boundaries = [0, ...cutsMs, durationMs];
   const segments: TimelineSegment[] = [];
 
@@ -54,6 +59,7 @@ export function useTimelineCuts(durationMs: number) {
       return false;
     }
 
+    // Avoid duplicate cuts at effectively the same visual position.
     return !normalizedCuts.some((cut) => Math.abs(cut - timeMs) <= CUT_EPSILON_MS);
   }
 
