@@ -15,6 +15,7 @@ import { useTimelineCuts } from "./timeline/useTimelineCuts";
 import { useTimelineSelection } from "./timeline/useTimelineSelection";
 import type { RecentVideo, VideoFile } from "./types";
 import { clampNumber, formatClockTime } from "./utils/time";
+import {Tagging} from "./components/tagging/Tagging"
 
 const RECENT_VIDEOS_STORAGE_KEY = "courtcut.recent-videos";
 const CONTROLS_HEIGHT_STORAGE_KEY = "courtcut.controls-height";

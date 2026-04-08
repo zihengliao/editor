@@ -11,6 +11,7 @@ import {
 import { TimelineScrubber } from "./timeline/TimelineScrubber";
 import { formatClockTime } from "../utils/time";
 import type { TimelineSegment } from "../timeline/types";
+import { useAddTag, tagMap } from "./tagging/TagLogic";
 
 interface PlayerControlsProps {
   hasVideo: boolean;
@@ -65,6 +66,9 @@ export function PlayerControls({
   onSeek,
   onSelectSegment,
 }: PlayerControlsProps) {
+
+  useAddTag()
+
   return (
     <footer className="grid h-full content-start gap-2.5 border-t border-[#303743] bg-gradient-to-b from-[#20252d] to-[#191e26] px-4 py-3">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 max-[860px]:grid-cols-1 max-[860px]:justify-items-center max-[860px]:gap-2.5">
@@ -119,6 +123,13 @@ export function PlayerControls({
             aria-label="Delete selected segment"
           >
             <DeleteIcon />
+          </button>
+
+          <button
+          type="button"
+          className="text-white cursor-pointer"
+          onClick={() => tagMap.addTagTest()}>
+            Tag
           </button>
 
           <button
