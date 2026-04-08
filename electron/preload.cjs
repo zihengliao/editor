@@ -8,6 +8,7 @@ const IPC_CHANNELS = {
   TO_FILE_URL: "path:toFileUrl",
   EXPORT_CLIP: "video:exportClip",
   EXPORT_PROGRESS: "video:exportProgress",
+  OPEN_TAGGER_WINDOW: "window:openTagger",
 };
 
 contextBridge.exposeInMainWorld("coachEditor", {
@@ -18,7 +19,8 @@ contextBridge.exposeInMainWorld("coachEditor", {
   loadProject: () => ipcRenderer.invoke(IPC_CHANNELS.LOAD_PROJECT),
   toFileUrl: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.TO_FILE_URL, filePath),
   exportClip: (payload) => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_CLIP, payload),
-
+  openTaggerWindow: () => ipcRenderer.invoke(IPC_CHANNELS.OPEN_TAGGER_WINDOW),
+  
   // The unsubscribe function keeps the renderer cleanup ergonomic.
   onExportProgress: (listener) => {
     const wrappedListener = (_event, progress) => listener(progress);

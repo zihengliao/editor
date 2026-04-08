@@ -18,6 +18,7 @@ interface CoachEditorApi {
   toFileUrl: (filePath: string) => Promise<string | null>;
   exportClip: (payload: ExportClipPayload) => Promise<ExportClipResult>;
   onExportProgress: (listener: (progress: number) => void) => () => void;
+  openTaggerWindow: () => Promise<{ ok: boolean }>;
 }
 
 declare global {

@@ -15,9 +15,11 @@ const IPC_CHANNELS = {
   TO_FILE_URL: "path:toFileUrl",
   EXPORT_CLIP: "video:exportClip",
   EXPORT_PROGRESS: "video:exportProgress",
+  OPEN_TAGGER_WINDOW: "window:openTagger",
 };
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+let taggerWindow = null;
 
 /**
  * Converts milliseconds into an ffmpeg-friendly timestamp.
@@ -284,6 +286,43 @@ function createMainWindow() {
   mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
 }
 
+function createTaggerWindow() {
+  if (taggerWindow && !taggerWindow.isDestroyed()) {
+    taggerWindow.focus();
+    return;
+  }
+
+  taggerWindow = new BrowserWindow({
+    width: 520,
+    height: 700,
+    minWidth: 420,
+    minHeight: 500,
+    title: "CourtCut Tagger",
+    autoHideMenuBar: true,
+    backgroundColor: "#161b22",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false,
+    },
+  });
+
+  if (isDev) {
+    const url = new URL(process.env.VITE_DEV_SERVER_URL);
+    url.searchParams.set("view", "tagger");
+    taggerWindow.loadURL(url.toString());
+  } else {
+    taggerWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"), {
+      query: { view: "tagger" },
+    });
+  }
+
+  taggerWindow.on("closed", () => {
+    taggerWindow = null;
+  });
+}
+
 function registerIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.OPEN_VIDEO, async () => {
     const result = await dialog.showOpenDialog({
@@ -303,6 +342,11 @@ function registerIpcHandlers() {
     const filePath = result.filePaths[0];
     return prepareVideoForPlayback(filePath);
   });
+
+  ipcMain.handle(IPC_CHANNELS.OPEN_TAGGER_WINDOW, async () => {
+  createTaggerWindow();
+  return { ok: true };
+});
 
   ipcMain.handle(IPC_CHANNELS.OPEN_VIDEO_PATH, async (_event, videoPath) => {
     if (!videoPath || typeof videoPath !== "string") {

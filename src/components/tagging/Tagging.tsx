@@ -5,9 +5,17 @@ export function Tagging () {
     return (
         <div>
         
-            <ol // this will contain all the events that the user tags
+            <ol className="list-decimal list-inside" // this will contain all the events that the user tags
             >
-
+                <li>
+                    dummy data
+                </li>
+                <li>
+                    dummy data
+                </li>
+                <li>
+                    dummy data
+                </li>
             </ol>
         </div>
     )
