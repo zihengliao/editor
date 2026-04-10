@@ -1,5 +1,6 @@
 import type { EditorProjectFile } from "./types";
 import type { VideoFile } from "../types";
+import type { TagGroups } from "../tagging/types";
 
 interface CreateProjectParams {
   videoFile: VideoFile;
@@ -8,6 +9,7 @@ interface CreateProjectParams {
   controlsHeightPx: number;
   cutsMs: number[];
   retainedRanges: Array<{ startMs: number; endMs: number }>;
+  tags: TagGroups;
 }
 
 export function buildProjectFile({
@@ -17,6 +19,7 @@ export function buildProjectFile({
   controlsHeightPx,
   cutsMs,
   retainedRanges,
+  tags,
 }: CreateProjectParams): EditorProjectFile {
   const projectName = videoFile.name.replace(/\.[^.]+$/, "");
 
@@ -37,6 +40,7 @@ export function buildProjectFile({
     ui: {
       controlsHeightPx,
     },
+    tags,
   };
 }
 

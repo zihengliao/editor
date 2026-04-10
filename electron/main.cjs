@@ -6,6 +6,7 @@ const { spawn } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const ffmpegPath = require("ffmpeg-static");
 const { setupAppMenu } = require("./menu/appMenu.cjs");
+const { TagStore } = require("./tagging/tagStore.cjs");
 
 const IPC_CHANNELS = {
   OPEN_VIDEO: "video:open",
@@ -16,10 +17,31 @@ const IPC_CHANNELS = {
   EXPORT_CLIP: "video:exportClip",
   EXPORT_PROGRESS: "video:exportProgress",
   OPEN_TAGGER_WINDOW: "window:openTagger",
+  TAG_GET_ALL: "tag:getAll",
+  TAG_ADD: "tag:add",
+  TAG_CLEAR: "tag:clear",
+  TAG_REPLACE: "tag:replace",
+  TAG_UPDATED: "tag:updated",
+  TAG_SET_EDITED_PLAYHEAD: "tag:setEditedPlayhead",
 };
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 let taggerWindow = null;
+const tagStore = new TagStore();
+let latestEditedPlayheadMs = 0;
+
+function broadcastTagsUpdated(mutation) {
+  const payload = {
+    tags: tagStore.getAllTags(),
+    mutation,
+  };
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TAG_UPDATED, payload);
+    }
+  }
+}
 
 /**
  * Converts milliseconds into an ffmpeg-friendly timestamp.
@@ -309,6 +331,29 @@ function createTaggerWindow() {
   });
 
   if (isDev) {
+    taggerWindow.webContents.on("before-input-event", (event, input) => {
+      const normalizedKey = String(input.key || "").toUpperCase();
+      const isInspectorShortcut =
+        input.type === "keyDown" &&
+        (input.control || input.meta) &&
+        input.shift &&
+        normalizedKey === "I";
+
+      if (!isInspectorShortcut) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (taggerWindow.webContents.isDevToolsOpened()) {
+        taggerWindow.webContents.closeDevTools();
+      } else {
+        taggerWindow.webContents.openDevTools({ mode: "detach" });
+      }
+    });
+  }
+
+  if (isDev) {
     const url = new URL(process.env.VITE_DEV_SERVER_URL);
     url.searchParams.set("view", "tagger");
     taggerWindow.loadURL(url.toString());
@@ -344,9 +389,55 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.OPEN_TAGGER_WINDOW, async () => {
-  createTaggerWindow();
-  return { ok: true };
-});
+    createTaggerWindow();
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.TAG_GET_ALL, async () => {
+    return {
+      tags: tagStore.getAllTags(),
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.TAG_ADD, async (_event, payload) => {
+    const createdTag = tagStore.addTag({
+      ...payload,
+      timeMs:
+        payload && Number.isFinite(payload.timeMs)
+          ? Math.floor(payload.timeMs)
+          : latestEditedPlayheadMs,
+    });
+    broadcastTagsUpdated("add");
+
+    return {
+      ok: true,
+      tag: createdTag,
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.TAG_CLEAR, async () => {
+    tagStore.clearTags();
+    broadcastTagsUpdated("clear");
+
+    return {
+      ok: true,
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.TAG_REPLACE, async (_event, payload) => {
+    const nextTags = payload && payload.tags && typeof payload.tags === "object" ? payload.tags : {};
+    tagStore.replaceTags(nextTags);
+    broadcastTagsUpdated("replace");
+
+    return {
+      ok: true,
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.TAG_SET_EDITED_PLAYHEAD, async (_event, timeMs) => {
+    latestEditedPlayheadMs = Number.isFinite(timeMs) ? Math.max(0, Math.floor(timeMs)) : 0;
+    return { ok: true };
+  });
 
   ipcMain.handle(IPC_CHANNELS.OPEN_VIDEO_PATH, async (_event, videoPath) => {
     if (!videoPath || typeof videoPath !== "string") {

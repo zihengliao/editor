@@ -11,11 +11,11 @@ import { Player } from "./components/Player";
 import { PlayerControls } from "./components/playercontrols";
 import { usePlaybackController } from "./hooks/usePlaybackController";
 import { useProjectController } from "./project/useProjectController";
+import { useTagsController } from "./tagging/hooks/useTagsController";
 import { useTimelineCuts } from "./timeline/useTimelineCuts";
 import { useTimelineSelection } from "./timeline/useTimelineSelection";
 import type { RecentVideo, VideoFile } from "./types";
 import { clampNumber, formatClockTime } from "./utils/time";
-import {Tagging} from "./components/tagging/Tagging"
 
 const RECENT_VIDEOS_STORAGE_KEY = "courtcut.recent-videos";
 const CONTROLS_HEIGHT_STORAGE_KEY = "courtcut.controls-height";
@@ -80,6 +80,20 @@ function App() {
   const playheadPercent =
     editedDurationMs > 0 ? clampNumber((currentEditedTimeMs / editedDurationMs) * 100, 0, 100) : 0;
 
+  const {
+    tags,
+    lastMutation: lastTagMutation,
+    clearTags,
+    replaceTags,
+    remapTagsAfterDeletedRange,
+  } = useTagsController();
+
+  useEffect(() => {
+    // Keep main-process playhead synced so detached tagger window
+    // can stamp tags at the current edited timeline position.
+    void window.coachEditor.setEditedPlayheadMs(currentEditedTimeMs);
+  }, [currentEditedTimeMs]);
+
   const { seekTo, skipBy, togglePlayback } = usePlaybackController({
     videoRef,
     currentTimeMs,
@@ -130,10 +144,21 @@ function App() {
 
       setCutsFromProject(projectCuts, projectDurationMs);
     },
+    setTagsFromProject: async (projectTags) => {
+      await replaceTags(projectTags);
+    },
     clampControlsHeight: (heightPx) =>
       clampNumber(heightPx, MIN_CONTROLS_HEIGHT, getMaxControlsHeight()),
     videoRef,
   });
+
+  useEffect(() => {
+    if (lastTagMutation !== "add") {
+      return;
+    }
+
+    markProjectDirty();
+  }, [lastTagMutation, markProjectDirty]);
 
   useEffect(() => {
     try {
@@ -207,6 +232,7 @@ function App() {
       setVideoFile(selectedVideo);
       clearCuts();
       clearSelectedSegment();
+      await clearTags();
       setShouldResetTimelineOnMetadata(true);
       markProjectDirty();
       setRecentVideos((currentVideos) => {
@@ -241,6 +267,7 @@ function App() {
       setVideoFile(selectedVideo);
       clearCuts();
       clearSelectedSegment();
+      await clearTags();
       setShouldResetTimelineOnMetadata(true);
       markProjectDirty();
       setRecentVideos((currentVideos) => {
@@ -330,6 +357,7 @@ function App() {
 
     const nextRanges = ranges.filter((range) => range.id !== selectedSegmentId);
     if (nextRanges.length === 0) {
+      void clearTags();
       videoRef.current?.pause();
       setIsPlaying(false);
       setCurrentTimeMs(0);
@@ -364,6 +392,7 @@ function App() {
       videoElement.currentTime = nextSourceTimeMs / 1000;
     }
     setCurrentTimeMs(nextSourceTimeMs);
+    void remapTagsAfterDeletedRange(selectedSegment.startMs, selectedSegment.endMs);
 
     setStatusMessage(
       `Deleted segment ${formatClockTime(selectedSegment.sourceStartMs)} - ${formatClockTime(selectedSegment.sourceEndMs)}.`,
@@ -375,6 +404,8 @@ function App() {
     ranges,
     clearSelectedSegment,
     deleteSegmentById,
+    clearTags,
+    remapTagsAfterDeletedRange,
     markProjectDirty,
   ]);
 
@@ -567,6 +598,7 @@ function App() {
           statusMessage={statusMessage}
           cutsMs={cutsMs}
           segments={segments}
+          tags={tags}
           selectedSegmentId={selectedSegmentId}
           canCut={hasRetainedSegments && canCutAt(currentTimeMs)}
           canDeleteSelected={selectedSegmentId !== null}

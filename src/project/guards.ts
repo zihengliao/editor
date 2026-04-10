@@ -1,4 +1,5 @@
 import type { EditorProjectFile } from "./types";
+import type { TagGroups } from "../tagging/types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -16,6 +17,7 @@ export function parseEditorProject(value: unknown): EditorProjectFile {
   const media = value.media;
   const timeline = value.timeline;
   const ui = value.ui;
+  const tags = value.tags;
 
   if (!isRecord(media) || typeof media.sourcePath !== "string" || typeof media.fileName !== "string") {
     throw new Error("Project media metadata is invalid.");
@@ -63,6 +65,49 @@ export function parseEditorProject(value: unknown): EditorProjectFile {
     return ranges;
   })();
 
+  const parsedTags: TagGroups = (() => {
+    if (isRecord(tags)) {
+      const groupedTags: TagGroups = {};
+
+      for (const [label, values] of Object.entries(tags)) {
+        if (!Array.isArray(values)) {
+          continue;
+        }
+
+        const safeTimes = values
+          .filter((timeMs): timeMs is number => typeof timeMs === "number")
+          .map((timeMs) => Math.floor(timeMs));
+
+        if (safeTimes.length > 0) {
+          groupedTags[label] = safeTimes;
+        }
+      }
+
+      return groupedTags;
+    }
+
+    // Backward compatibility for earlier array-based tag schema.
+    if (Array.isArray(tags)) {
+      const groupedTags: TagGroups = {};
+
+      for (const entry of tags) {
+        if (!isRecord(entry) || typeof entry.stat !== "string" || typeof entry.timeMs !== "number") {
+          continue;
+        }
+
+        if (!groupedTags[entry.stat]) {
+          groupedTags[entry.stat] = [];
+        }
+
+        groupedTags[entry.stat].push(Math.floor(entry.timeMs));
+      }
+
+      return groupedTags;
+    }
+
+    return {};
+  })();
+
   return {
     version: 1,
     projectName: typeof value.projectName === "string" ? value.projectName : media.fileName,
@@ -80,5 +125,6 @@ export function parseEditorProject(value: unknown): EditorProjectFile {
     ui: {
       controlsHeightPx: ui.controlsHeightPx,
     },
+    tags: parsedTags,
   };
 }

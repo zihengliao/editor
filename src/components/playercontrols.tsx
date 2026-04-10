@@ -9,9 +9,15 @@ import {
   UndoIcon,
 } from "./TransportIcons";
 import { TimelineScrubber } from "./timeline/TimelineScrubber";
+import {
+  TIMELINE_MAIN_LANE_ROW_CLASS,
+  TIMELINE_RULER_ROW_CLASS,
+  TIMELINE_TAG_ROW_CLASS,
+} from "./timeline/layoutConstants";
 import { formatClockTime } from "../utils/time";
+import { TagList } from "../tagging/components/TagList";
+import type { TagGroups } from "../tagging/types";
 import type { TimelineSegment } from "../timeline/types";
-import { useAddTag, tagMap } from "./tagging/TagLogic";
 
 interface PlayerControlsProps {
   hasVideo: boolean;
@@ -23,6 +29,7 @@ interface PlayerControlsProps {
   statusMessage: string;
   cutsMs: number[];
   segments: TimelineSegment[];
+  tags: TagGroups;
   selectedSegmentId: string | null;
   canCut: boolean;
   canDeleteSelected: boolean;
@@ -50,6 +57,7 @@ export function PlayerControls({
   statusMessage,
   cutsMs,
   segments,
+  tags,
   selectedSegmentId,
   canCut,
   canDeleteSelected,
@@ -66,8 +74,7 @@ export function PlayerControls({
   onSeek,
   onSelectSegment,
 }: PlayerControlsProps) {
-
-  useAddTag()
+  const tagRows = Object.entries(tags).map(([label, timesMs]) => ({ label, timesMs }));
 
   return (
     <footer className="grid h-full content-start gap-2.5 border-t border-[#303743] bg-gradient-to-b from-[#20252d] to-[#191e26] px-4 py-3">
@@ -128,8 +135,10 @@ export function PlayerControls({
           <button
           type="button"
           className="text-white cursor-pointer"
-          onClick={() => tagMap.addTagTest()}>
-            Tag
+          onClick={async () => {
+            await window.coachEditor.openTaggerWindow();
+          }}>
+            Tags
           </button>
 
           <button
@@ -161,18 +170,31 @@ export function PlayerControls({
         </div>
       </div>
 
-      <TimelineScrubber
-        hasVideo={hasVideo}
-        cutsMs={cutsMs}
-        segments={segments}
-        selectedSegmentId={selectedSegmentId}
-        currentTimeMs={currentTimeMs}
-        durationMs={durationMs}
-        playheadPercent={playheadPercent}
-        isDisabled={!hasVideo || isImporting}
-        onSeek={onSeek}
-        onSelectSegment={onSelectSegment}
-      />
+      <div className="flex">
+        <TagList
+          tags={tags}
+          className="w-56 shrink-0 bg-[#1a1f27] p-2"
+          title="Tags"
+          emptyLabel="No tags yet."
+          rowClassName={TIMELINE_TAG_ROW_CLASS}
+        />
+
+        <div className="min-w-0 flex-1">
+          <TimelineScrubber
+            hasVideo={hasVideo}
+            cutsMs={cutsMs}
+            segments={segments}
+            tagRows={tagRows}
+            selectedSegmentId={selectedSegmentId}
+            currentTimeMs={currentTimeMs}
+            durationMs={durationMs}
+            playheadPercent={playheadPercent}
+            isDisabled={!hasVideo || isImporting}
+            onSeek={onSeek}
+            onSelectSegment={onSelectSegment}
+          />
+        </div>
+      </div>
 
       <p className="text-xs text-[#9aa4b3]">{statusMessage}</p>
     </footer>

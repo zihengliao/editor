@@ -1,3 +1,5 @@
+import type { TagGroups } from "../tagging/types";
+
 export interface EditorProjectMedia {
   sourcePath: string;
   fileName: string;
@@ -26,4 +28,5 @@ export interface EditorProjectFile {
   media: EditorProjectMedia;
   timeline: EditorProjectTimeline;
   ui: EditorProjectUi;
+  tags: TagGroups;
 }

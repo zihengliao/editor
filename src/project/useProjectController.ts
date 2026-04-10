@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { buildProjectFile, buildSuggestedProjectFileName } from "./mapper";
 import { parseEditorProject } from "./guards";
 import type { RecentVideo, VideoFile } from "../types";
+import type { TagGroups } from "../tagging/types";
 import { clampNumber } from "../utils/time";
 
 interface UseProjectControllerParams {
@@ -25,6 +26,7 @@ interface UseProjectControllerParams {
     cutsMs: number[];
     retainedRanges: Array<{ startMs: number; endMs: number }>;
   }) => void;
+  setTagsFromProject: (tags: TagGroups) => Promise<void> | void;
   clampControlsHeight: (heightPx: number) => number;
   videoRef: React.RefObject<HTMLVideoElement | null>;
 }
@@ -46,6 +48,7 @@ export function useProjectController({
   setIsFileMenuOpen,
   setRecentVideos,
   setTimelineFromProject,
+  setTagsFromProject,
   clampControlsHeight,
   videoRef,
 }: UseProjectControllerParams) {
@@ -90,6 +93,7 @@ export function useProjectController({
         cutsMs: parsedProject.timeline.cutsMs,
         retainedRanges: parsedProject.timeline.retainedRanges,
       });
+      await setTagsFromProject(parsedProject.tags);
       setControlsHeightPx(clampControlsHeight(parsedProject.ui.controlsHeightPx));
 
       setRecentVideos((currentVideos) => {
@@ -115,6 +119,7 @@ export function useProjectController({
     setIsPlaying,
     setRecentVideos,
     setTimelineFromProject,
+    setTagsFromProject,
     setStatusMessage,
     setVideoFile,
   ]);
@@ -127,26 +132,33 @@ export function useProjectController({
       return;
     }
 
-    const project = buildProjectFile({
-      videoFile,
-      currentTimeMs,
-      durationMs,
-      controlsHeightPx,
-      cutsMs,
-      retainedRanges,
-    });
+    try {
+      const tagSnapshot = await window.coachEditor.getTags();
 
-    const result = await window.coachEditor.saveProject(
-      project,
-      buildSuggestedProjectFileName(videoFile.name),
-    );
+      const project = buildProjectFile({
+        videoFile,
+        currentTimeMs,
+        durationMs,
+        controlsHeightPx,
+        cutsMs,
+        retainedRanges,
+        tags: tagSnapshot.tags,
+      });
 
-    if (result.canceled) {
-      return;
+      const result = await window.coachEditor.saveProject(
+        project,
+        buildSuggestedProjectFileName(videoFile.name),
+      );
+
+      if (result.canceled) {
+        return;
+      }
+
+      setStatusMessage(`Project saved to ${result.path}.`);
+      clearProjectDirty();
+    } catch (error) {
+      setStatusMessage(`Could not save project: ${(error as Error).message}`);
     }
-
-    setStatusMessage(`Project saved to ${result.path}.`);
-    clearProjectDirty();
   }, [
     clearProjectDirty,
     controlsHeightPx,

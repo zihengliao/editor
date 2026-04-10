@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TimelineSegment } from "../../timeline/types";
+import { TimelineBlueLane } from "./TimelineBlueLane";
+import {
+  TIMELINE_MAIN_LANE_ROW_CLASS,
+  TIMELINE_RULER_ROW_CLASS,
+  TIMELINE_TAG_ROW_CLASS,
+} from "./layoutConstants";
+
+interface TagTimelineRow {
+  label: string;
+  timesMs: number[];
+}
 
 interface TimelineScrubberProps {
   hasVideo: boolean;
   cutsMs: number[];
   segments: TimelineSegment[];
+  tagRows: TagTimelineRow[];
   selectedSegmentId: string | null;
   currentTimeMs: number;
   durationMs: number;
@@ -64,6 +76,7 @@ export function TimelineScrubber({
   hasVideo,
   cutsMs,
   segments,
+  tagRows,
   selectedSegmentId,
   currentTimeMs,
   durationMs,
@@ -133,7 +146,7 @@ export function TimelineScrubber({
       className="relative overflow-hidden border border-[#2b3240] bg-[#141820]"
     >
       <div
-        className="relative h-8 border-b border-[#262d3a] bg-[#1b2028]"
+        className={`relative ${TIMELINE_RULER_ROW_CLASS} border-b border-[#262d3a] bg-[#1b2028]`}
         onPointerDown={handlePointerDown}
         role="slider"
         aria-label="Playback timeline"
@@ -169,10 +182,10 @@ export function TimelineScrubber({
         ))}
       </div>
 
-      <div className="relative h-10 bg-[#1b2028] py-2">
+      <div className={`relative ${TIMELINE_MAIN_LANE_ROW_CLASS} bg-[#1b2028] py-2`}>
         {hasVideo ? (
-          <div className="relative h-full w-full">
-            <div className="h-full w-full border border-[#2a5b86] bg-gradient-to-r from-[#3d78aa] to-[#3f79ab]" />
+            <div className="relative h-full w-full">
+              <TimelineBlueLane />
 
             {/*
               Segment hitboxes sit on top of the blue strip so each timeline block
@@ -220,6 +233,29 @@ export function TimelineScrubber({
         ) : null}
       </div>
 
+      {hasVideo
+        ? tagRows.map((tagRow) => (
+            <div
+              key={tagRow.label}
+              className={`relative ${TIMELINE_TAG_ROW_CLASS} border-t border-[#262d3a] bg-[#1b2028]`}
+            >
+              <TimelineBlueLane className="h-full w-full border border-[#2a5b86] bg-gradient-to-r from-[#3d78aa] to-[#3f79ab]" />
+
+              {tagRow.timesMs.map((timeMs, markerIndex) => {
+                const markerLeftPercent = durationMs > 0 ? (timeMs / durationMs) * 100 : 0;
+                return (
+                  <span
+                    key={`${tagRow.label}-${timeMs}-${markerIndex}`}
+                    className="pointer-events-none absolute inset-y-0 z-10 w-px bg-white"
+                    style={{ left: `${markerLeftPercent}%` }}
+                    aria-hidden="true"
+                  />
+                );
+              })}
+            </div>
+          ))
+        : null}
+
       {hasVideo ? (
         <div
           className="pointer-events-none absolute inset-y-0 w-px bg-[#f04c3e]"
@@ -229,6 +265,7 @@ export function TimelineScrubber({
           <span className="absolute -left-[5px] top-0 h-0 w-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-[#f04c3e]" />
         </div>
       ) : null}
+
     </div>
   );
 }
